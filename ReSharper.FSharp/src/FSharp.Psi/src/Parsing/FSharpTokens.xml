@@ -146,7 +146,39 @@
         <Token name="PP_NOT" representation="!" />
         <Token name="PP_LPAR" representation="(" />
         <Token name="PP_RPAR" representation=")" />
-    </Tokens>
+
+        <Token name="TYPE_COMING_SOON" representation="" />
+        <Token name="TYPE_IS_HERE" representation="" />
+        <Token name="MODULE_COMING_SOON" representation="" />
+        <Token name="MODULE_IS_HERE" representation="" />
+        <Token name="HIGH_PRECEDENCE_BRACK_APP" representation="" />
+        <Token name="HIGH_PRECEDENCE_PAREN_APP" representation="" />
+        <Token name="HIGH_PRECEDENCE_TYAPP" representation="" />
+        <Token name="OLET" representation="" />
+        <Token name="OLET_BANG" representation="" />
+        <Token name="OUSE" representation="" />
+        <Token name="OUSE_BANG" representation="" />
+        <Token name="ODO" representation="" />
+        <Token name="ODO_BANG" representation="" />
+        <Token name="OTHEN" representation="" />
+        <Token name="OELSE" representation="" />
+        <Token name="OFUNCTION" representation="" />
+        <Token name="OFUN" representation="" />
+        <Token name="ORESET" representation="" />
+        <Token name="OBLOCKBEGIN" representation="" />
+        <Token name="OBLOCKSEP" representation="" />
+
+        <Token name="OEND" representation="" />
+        <Token name="ODECLEND" representation="" />
+        <Token name="ORIGHT_BLOCK_END" representation="" />
+        <Token name="OBLOCKEND" representation="" />
+        <Token name="OBLOCKEND_COMING_SOON" representation="" />
+        <Token name="OBLOCKEND_IS_HERE" representation="" />
+
+        <Token name="OINTERFACE_MEMBER" representation="" />        
+
+        <Token name="EOF" representation="" />        
+</Tokens>
 
     <Tokens NodeType="FSharpTokenNodeType">
         <Token name="IDENTIFIER" />

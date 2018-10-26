@@ -39,6 +39,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
       public override bool IsConstantLiteral => Literals[this];
       public override bool IsIdentifier => Identifiers[this];
       public override bool IsKeyword => Keywords[this];
+      public bool IsDummy => Index == ODUMMY_NODE_TYPE_INDEX;
 
       public override string TokenRepresentation { get; }
 
@@ -80,12 +81,28 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
       public override LeafElementBase Create(string text) => new NewLine(text);
     }
 
+    public sealed class DummyNodeType : FSharpTokenNodeType
+    {
+      public readonly TokenNodeType Token;
+
+      public DummyNodeType(int nodeTypeIndex) : base("ODUMMY", nodeTypeIndex)
+      {
+      }
+
+      private DummyNodeType(int nodeTypeIndex, TokenNodeType token) : base("ODUMMY", nodeTypeIndex) =>
+        Token = token;
+
+      public TokenNodeType Create(TokenNodeType token) => new DummyNodeType(Index, token);
+    }
+
     public const int WHITESPACE_NODE_TYPE_INDEX = LAST_GENERATED_TOKEN_TYPE_INDEX + 1;
     public static readonly TokenNodeType WHITESPACE = new WhitespaceNodeType(WHITESPACE_NODE_TYPE_INDEX);
 
     public const int NEW_LINE_NODE_TYPE_INDEX = LAST_GENERATED_TOKEN_TYPE_INDEX + 2;
     public static readonly TokenNodeType NEW_LINE = new NewLineNodeType(NEW_LINE_NODE_TYPE_INDEX);
 
+    public const int ODUMMY_NODE_TYPE_INDEX = LAST_GENERATED_TOKEN_TYPE_INDEX + 3;
+    public static readonly TokenNodeType ODUMMY = new DummyNodeType(ODUMMY_NODE_TYPE_INDEX);
 
     public static readonly NodeTypeSet RightBraces;
     public static readonly NodeTypeSet LeftBraces;
@@ -198,11 +215,11 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
 
       Strings = new NodeTypeSet(
         CHARACTER_LITERAL,
-        STRING,
-        VERBATIM_STRING,
-        TRIPLE_QUOTED_STRING,
+        STRING, UNFINISHED_STRING,
+        VERBATIM_STRING, UNFINISHED_VERBATIM_STRING,
+        TRIPLE_QUOTED_STRING, UNFINISHED_TRIPLE_QUOTED_STRING,
         BYTEARRAY);
-      
+
       Literals = new NodeTypeSet(
         IEEE32,
         IEEE64,
