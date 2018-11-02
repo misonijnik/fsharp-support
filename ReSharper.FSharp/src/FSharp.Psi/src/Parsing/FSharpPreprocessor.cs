@@ -93,8 +93,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
 
       private TokenNodeType TokenType()
       {
-        while (ourSkippedTokens[myLexer.TokenType])
-          myLexer.Advance();
+        myLexer.AdvanceWhile(ourSkippedTokens);
         return myLexer.TokenType;
       }
 
