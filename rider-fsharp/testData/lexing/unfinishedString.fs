@@ -1,0 +1,2 @@
+(* """hello""" *)
+        let str = "STRING

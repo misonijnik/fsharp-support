@@ -1,0 +1,3 @@
+LINE_COMMENT ('//hello world!')
+NEW_LINE ('\n')
+LINE_COMMENT ('//hello second world!')

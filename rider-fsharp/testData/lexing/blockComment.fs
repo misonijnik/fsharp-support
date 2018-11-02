@@ -1,0 +1,1 @@
+(* Here's a code snippet: let s = "*)" *)

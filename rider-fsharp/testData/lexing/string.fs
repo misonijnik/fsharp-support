@@ -1,0 +1,3 @@
+"STRING
+ \ NEW_LINE
+"

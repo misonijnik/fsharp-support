@@ -1,0 +1,4 @@
+VERBATIM_STRING ('@"\"')
+WHITESPACE (' ')
+LPAREN ('(')
+RPAREN (')')

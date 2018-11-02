@@ -1,0 +1,4 @@
+VERBATIM_STRING ('@"string 'c'"')
+WHITESPACE (' ')
+LPAREN ('(')
+RPAREN (')')

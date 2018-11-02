@@ -1,0 +1,4 @@
+TRIPLE_QUOTED_STRING ('"""\"""')
+WHITESPACE (' ')
+LPAREN ('(')
+RPAREN (')')

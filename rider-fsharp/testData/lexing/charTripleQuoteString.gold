@@ -1,0 +1,4 @@
+TRIPLE_QUOTED_STRING ('"""string 'c'"""')
+WHITESPACE (' ')
+LPAREN ('(')
+RPAREN (')')

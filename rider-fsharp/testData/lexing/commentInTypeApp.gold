@@ -1,0 +1,4 @@
+IDENT ('typeof')
+LESS ('<')
+IDENT ('int')
+LINE_COMMENT ('//>')

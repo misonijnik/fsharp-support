@@ -1,0 +1,4 @@
+STRING ('"string 'c'"')
+WHITESPACE (' ')
+LPAREN ('(')
+RPAREN (')')

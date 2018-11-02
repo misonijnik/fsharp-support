@@ -1,0 +1,3 @@
+LBRACK_LESS ('[<')
+IDENT ('SomeAttribute')
+GREATER_RBRACK ('>]')

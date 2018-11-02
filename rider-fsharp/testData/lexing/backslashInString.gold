@@ -1,0 +1,1 @@
+STRING ('"a\\n          b\\n		c\\n\n	d"')
