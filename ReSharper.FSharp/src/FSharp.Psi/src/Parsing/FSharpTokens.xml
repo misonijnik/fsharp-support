@@ -79,6 +79,8 @@
 
         <Token name="GREATER" representation=">" />
         <Token name="LESS" representation="&lt;" />
+        <Token name="BEGIN_TYPE_APP" representation="&lt;" />
+        <Token name="END_TYPE_APP" representation=">" />
 
         <Token name="LPAREN" representation="(" />
         <Token name="RPAREN" representation=")" />
