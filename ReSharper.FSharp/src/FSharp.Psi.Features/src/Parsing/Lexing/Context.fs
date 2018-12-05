@@ -76,6 +76,18 @@ module Context =
         | CtxtVanilla _ -> true
         | _ -> false
 
+    let isMemberBody = function
+        | CtxtMemberBody _ -> true
+        | _ -> false
+
+    let isParenWithLBrace = function
+        | CtxtParen (token, _) -> token == Token.LBRACE
+        | _ -> false
+
+    let isParenWithLParen = function
+        | CtxtParen (token, _) -> token == Token.LPAREN
+        | _ -> false
+
     let detectJoinInContext stack =
         let rec check stack =
             match peek stack with
@@ -88,7 +100,7 @@ module Context =
         isVanilla (peek stack) && check (pop stack)
 
     let rec unindentationLimit (newCtxt : Context) strict (stack : ImmutableStack<Context>) =
-        let stackLength = count stack
+        let stackLength = length stack
         let getCtxt n =
             if stackLength >= n then peekN n stack else dummyCtxt
         if stackLength = 0 then PositionWithColumn(newCtxt.StartPos, -1) else
@@ -127,7 +139,7 @@ module Context =
                     PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol + 1)
             | _, CtxtParen (token ,_), CtxtSeqBlock _, CtxtThen _, (CtxtIf _ as limitCtxt)
             | _, CtxtParen (token ,_), CtxtSeqBlock _, CtxtElse _, (CtxtIf _ as limitCtxt)
-                when stackLength >= 4 && Postprocessing.isLeftParen token ->
+                when stackLength >= 4 && Postprocessing.isLeftParenBegin token ->
                     PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol + 1)
             | _, CtxtParen (token, _), CtxtVanilla _, (CtxtSeqBlock _ as limitCtxt), _
                 when stackLength >= 3 && Postprocessing.isLeftBraceBrackAndBeginTypeApp token ->
@@ -181,3 +193,59 @@ module Context =
     let replaceCtxt p ctxt (stack : byref<_>) =
         popCtxt &stack
         pushCtxt p ctxt &stack
+
+    let tokenBalancesHeadContext token stack =
+        let stackLength = length stack
+        let getCtxt n =
+            if stackLength >= n then peekN n stack else dummyCtxt
+        if stackLength = 0 then false else
+            match token, peek stack, getCtxt 2 with
+            | endToken, CtxtWithAsAugment _, _ when endToken == Token.END -> true
+            | elseIfToken, CtxtIf _, _ when elseIfToken == Token.ELSE || elseIfToken == Token.ELIF -> true
+            | doneToken, CtxtDo _, _ when doneToken == Token.DONE -> true
+            | withToken, CtxtMatch _, _
+            | withToken, CtxtException _, _
+            | withToken, CtxtMemberHead _, _
+            | withToken, CtxtInterfaceHead _, _
+            | withToken, CtxtTry _, _
+            | withToken, CtxtTypeDefns _, _
+            | withToken, CtxtMemberBody _, _ when withToken == Token.WITH -> true
+            | withToken, CtxtSeqBlock _, CtxtParen (lbraceToken, _)
+                when stackLength >= 2 && withToken == Token.WITH && lbraceToken == Token.LBRACE -> true
+            | finallyToken, CtxtTry _, _ when finallyToken == Token.FINALLY -> true
+            | inToken, (CtxtFor _ | CtxtLetDecl _), _ when inToken = Token.IN -> true
+            | inToken, _, _ when inToken = Token.IN && detectJoinInContext stack -> true
+            | semicolonSemicolonToken, CtxtSeqBlock _, CtxtNamespaceBody _
+            | semicolonSemicolonToken, CtxtSeqBlock _, CtxtModuleBody (_, true)
+                when stackLength >= 2 && semicolonSemicolonToken == Token.SEMICOLON_SEMICOLON -> true
+            | t2, CtxtParen (t1, _), _ -> Postprocessing.isParenTokensBalance t1 t2
+            | _ -> false
+
+    let endTokenForACtxt ctxt (tokenOut : byref<TokenNodeType>) =
+        match ctxt with 
+        | CtxtFun _
+        | CtxtMatchClauses _
+        | CtxtWithAsLet _ ->
+            tokenOut <- Token.OEND
+            true
+        | CtxtWithAsAugment _  ->
+            tokenOut <- Token.ODECLEND
+            true
+        | CtxtDo _
+        | CtxtLetDecl (true, _) ->
+            tokenOut <- Token.ODECLEND
+            true
+        | CtxtSeqBlock(_,_,AddBlockEnd) ->
+            tokenOut <- Token.OBLOCKEND
+            true
+        | CtxtSeqBlock(_,_,AddOneSidedBlockEnd) ->  
+            tokenOut <- Token.ORIGHT_BLOCK_END
+            true
+        | _ -> false
+
+    let tokenForcesHeadContextClosure token stack =
+        not (isEmpty stack) && (token == Token.EOF
+            || (token == Token.SEMICOLON_SEMICOLON && not (tokenBalancesHeadContext token stack))
+            || (Postprocessing.isForcesHeadContextClosure token
+                && not (tokenBalancesHeadContext token stack)
+                && Postprocessing.suffixExists (tokenBalancesHeadContext token) stack))

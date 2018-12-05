@@ -6,16 +6,74 @@ open JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
 open System.Collections.Generic
 type Token = FSharpTokenType
 
+[<Struct>]
+type Position =
+    val Line: int
+    val StartOfLineAbsoluteOffset: int
+    val AbsoluteOffset: int
+    member x.Column = x.AbsoluteOffset - x.StartOfLineAbsoluteOffset
+    new (line: int, startOfLineAbsoluteOffset: int, absoluteOffset: int) =
+        { Line = line
+          AbsoluteOffset = absoluteOffset
+          StartOfLineAbsoluteOffset = startOfLineAbsoluteOffset }
+    member x.NextLine = Position (x.Line + 1, x.AbsoluteOffset, x.AbsoluteOffset)
+    member x.EndOfToken n = Position (x.Line, x.StartOfLineAbsoluteOffset, x.AbsoluteOffset + n)
+    member x.ShiftColumnBy by = Position (x.Line, x.StartOfLineAbsoluteOffset, x.AbsoluteOffset + by)
+    member x.ColumnMinusOne = Position (x.Line, x.StartOfLineAbsoluteOffset, x.StartOfLineAbsoluteOffset - 1)
+    static member Empty = Position ()
+    static member FirstLine = Position (1, 0, 0)
+
+[<Struct>]
+type PositionWithColumn =
+    val Position: Position
+    val Column: int
+    new (position: Position, column: int) = { Position = position; Column = column }
+
+[<Struct>]
+type TokenTup =
+    val CurrentTokenType : TokenNodeType
+    val StartPosition : Position
+    val EndPosition : Position
+    val LexicalState : int
+    new (currTokenType, bufferStart, bufferEnd, lexicalState) =
+        { CurrentTokenType = currTokenType;
+          StartPosition = bufferStart;
+          EndPosition = bufferEnd;
+          LexicalState = lexicalState; }
+
+    member x.StartPosOfTokenTup () =
+        if Token.EOF == x.CurrentTokenType
+            then x.StartPosition.ColumnMinusOne
+            else x.StartPosition
+
+    member x.UseLocation(tok) =
+        TokenTup (tok, x.StartPosition, x.EndPosition, x.LexicalState)
+
+    member x.UseStartLocation(tok) =
+        TokenTup (tok, x.StartPosition, x.StartPosition, x.LexicalState)
+
+    member x.UseEndLocation(tok) =
+        TokenTup (tok, x.EndPosition, x.EndPosition, x.LexicalState)
+
+    member x.UseShiftedLocation(tok, shiftLeft, shiftRight) =
+        TokenTup (tok, x.StartPosition.ShiftColumnBy shiftLeft, x.EndPosition.ShiftColumnBy shiftRight, x.LexicalState)
+
 module Postprocessing =
+    open JetBrains.ReSharper.Plugins.FSharp.Psi.Features.Util.ImmutableStack
+
+    let dummyTokenTup = TokenTup ()
     let rec handleDummy (token : TokenNodeType) =
         match token with
         | :? Token.DummyNodeType as token -> handleDummy token.Token
         | _ -> token
 
-    let odeclend = new NodeTypeSet(Token.ORIGHT_BLOCK_END, Token.OBLOCKEND, Token.ODECLEND)
+    let rec suffixExists p l = if isEmpty l then false else p (pop l) || suffixExists p (pop l)
+
+
+    let odeclend = NodeTypeSet (Token.ORIGHT_BLOCK_END, Token.OBLOCKEND, Token.ODECLEND)
     let infix =
-        NodeTypeSet(
-            Token.COMMA,
+        NodeTypeSet
+           (Token.COMMA,
             Token.BAR_BAR,
             Token.AMP_AMP,
             Token.AMP,
@@ -45,7 +103,7 @@ module Postprocessing =
             Token.DOLLAR)
 
     let ifBlockContinuator =
-        NodeTypeSet(Token.THEN, Token.ELSE, Token.ELIF, Token.END, Token.RPAREN)
+        NodeTypeSet (Token.THEN, Token.ELSE, Token.ELIF, Token.END, Token.RPAREN)
      |> odeclend.Union
 
     let tryBlockContinuator =
@@ -53,35 +111,51 @@ module Postprocessing =
      |> odeclend.Union
 
     let private thenBlockContinuator = odeclend
-    let private doneDeclEnd = new NodeTypeSet(Token.DONE) |> odeclend.Union
-    let private andDeclEnd = new NodeTypeSet(Token.AND) |> odeclend.Union
-    let private interfaceContinuator = new NodeTypeSet(Token.END) |> odeclend.Union
+    let private doneDeclEnd = NodeTypeSet (Token.DONE) |> odeclend.Union
+    let private andDeclEnd = NodeTypeSet (Token.AND) |> odeclend.Union
+    let private interfaceContinuator = NodeTypeSet (Token.END) |> odeclend.Union
 
     //todo: override locateToken to add EOF token [misonijnik]
-    let private notNamespaceContinuator = new NodeTypeSet(Token.EOF, Token.NAMESPACE)
+    let private notNamespaceContinuator = NodeTypeSet (Token.EOF, Token.NAMESPACE)
     let private typeContinuator =
-        NodeTypeSet(Token.RBRACE, Token.WITH, Token.BAR, Token.AND, Token.END)
+        NodeTypeSet (Token.RBRACE, Token.WITH, Token.BAR, Token.AND, Token.END)
      |> odeclend.Union
 
-    let private typeSeqBlockElementContinuator = new NodeTypeSet(Token.BAR, Token.OBLOCKBEGIN) |> odeclend.Union
+    let private typeSeqBlockElementContinuator = NodeTypeSet (Token.BAR, Token.OBLOCKBEGIN) |> odeclend.Union
     let private seqBlockElementContinuator =
-        NodeTypeSet(
-            Token.END, Token.AND, Token.WITH, Token.THEN, Token.RPAREN, Token.RBRACE,
-            Token.RBRACK, Token.BAR_RBRACK, Token.RQUOTE_TYPED, Token.RQUOTE_UNTYPED)
+        NodeTypeSet
+           (Token.END,
+            Token.AND,
+            Token.WITH,
+            Token.THEN,
+            Token.RPAREN,
+            Token.RBRACE,
+            Token.RBRACK,
+            Token.BAR_RBRACK,
+            Token.RQUOTE_TYPED,
+            Token.RQUOTE_UNTYPED)
      |> odeclend.Union
 
-    let private longIdentifier = new NodeTypeSet(Token.IDENTIFIER, Token.DOT)
-    let private longIdentifierOrGlobal = new NodeTypeSet(Token.GLOBAL) |> longIdentifier.Union
+    let private longIdentifier = NodeTypeSet (Token.IDENTIFIER, Token.DOT)
+    let private longIdentifierOrGlobal = NodeTypeSet (Token.GLOBAL) |> longIdentifier.Union
     let private atomicExprEndToken =
-        NodeTypeSet(
-            Token.IDENTIFIER, Token.RPAREN, Token.RBRACK, Token.RBRACE, Token.BAR_RBRACK, Token.END,
-            Token.NULL, Token.FALSE, Token.TRUE, Token.UNDERSCORE)
+        NodeTypeSet
+           (Token.IDENTIFIER,
+            Token.RPAREN,
+            Token.RBRACK,
+            Token.RBRACE,
+            Token.BAR_RBRACK,
+            Token.END,
+            Token.NULL,
+            Token.FALSE,
+            Token.TRUE,
+            Token.UNDERSCORE)
      |> Token.Literals.Union
      |> Token.Strings.Union
 
     let private parenTokensBalance =
-        NodeTypeDictionary<TokenNodeType>(
-            [|
+        NodeTypeDictionary<TokenNodeType>
+            ([|
                 new KeyValuePair<NodeType, TokenNodeType>(Token.LPAREN, Token.RPAREN)
                 new KeyValuePair<NodeType, TokenNodeType>(Token.LBRACE, Token.RPAREN)
                 new KeyValuePair<NodeType, TokenNodeType>(Token.LBRACK, Token.RBRACK)
@@ -95,14 +169,129 @@ module Postprocessing =
                 new KeyValuePair<NodeType, TokenNodeType>(Token.BEGIN, Token.END)
                 new KeyValuePair<NodeType, TokenNodeType>(Token.LQUOTE_TYPED, Token.RQUOTE_TYPED)
                 new KeyValuePair<NodeType, TokenNodeType>(Token.LQUOTE_UNTYPED, Token.RQUOTE_UNTYPED)
-            |])
+             |])
 
-    let leftBraceBrack = new NodeTypeSet(Token.LBRACE, Token.LBRACK, Token.LBRACK_BAR)
-    let leftParenBrackAndBegin = new NodeTypeSet(Token.LPAREN, Token.LBRACK, Token.LBRACK_BAR, Token.BEGIN)
-    let leftParen = new NodeTypeSet(Token.BEGIN, Token.LPAREN) |> leftBraceBrack.Union
-    let sigStructBegin = new NodeTypeSet(Token.SIG, Token.STRUCT, Token.BEGIN)
-    let leftBraceBrackAndBeginTypeApp = new NodeTypeSet(Token.BEGIN, Token.BEGIN_TYPE_APP) |> leftBraceBrack.Union
-    let classStructInterface = new NodeTypeSet(Token.CLASS, Token.STRUCT, Token.INTERFACE)
+    let leftBraceBrack = NodeTypeSet (Token.LBRACE, Token.LBRACK, Token.LBRACK_BAR)
+    let leftParenBrackAndBegin = NodeTypeSet (Token.LPAREN, Token.LBRACK, Token.LBRACK_BAR, Token.BEGIN)
+    let leftParenBegin = NodeTypeSet (Token.BEGIN, Token.LPAREN) |> leftBraceBrack.Union
+    let leftParen = NodeTypeSet Token.LPAREN |> leftBraceBrack.Union
+    let sigStructBegin = NodeTypeSet (Token.SIG, Token.STRUCT, Token.BEGIN)
+    let leftBraceBrackAndBeginTypeApp = NodeTypeSet (Token.BEGIN, Token.BEGIN_TYPE_APP) |> leftBraceBrack.Union
+    let classStructInterface = NodeTypeSet (Token.CLASS, Token.STRUCT, Token.INTERFACE)
+    let leftParenBrackLess = NodeTypeSet (Token.LPAREN, Token.LESS, Token.LBRACK_LESS)
+    let grammarInTypes =
+        NodeTypeSet
+           (Token.DEFAULT,
+            Token.COLON,
+            Token.COLON_GREATER,
+            Token.STRUCT,
+            Token.NULL,
+            Token.DELEGATE,
+            Token.AND,
+            Token.WHEN,
+            Token.DOT_DOT,
+            Token.MINUS,
+            Token.GLOBAL,
+            Token.CONST,
+            Token.KEYWORD_STRING_SOURCE_DIRECTORY,
+            Token.KEYWORD_STRING_SOURCE_FILE,
+            Token.KEYWORD_STRING_LINE,
+            Token.NULL,
+            Token.SBYTE,
+            Token.INT16,
+            Token.INT32,
+            Token.INT64,
+            Token.NATIVEINT,
+            Token.BYTE,
+            Token.UINT16,
+            Token.UINT32,
+            Token.UINT64,
+            Token.UNATIVEINT,
+            Token.DECIMAL,
+            Token.BIGNUM,
+            Token.STRING,
+            Token.BYTEARRAY,
+            Token.CHARACTER_LITERAL,
+            Token.TRUE,
+            Token.FALSE,
+            Token.IEEE32,
+            Token.IEEE64,
+            Token.DOT,
+            Token.UNDERSCORE,
+            Token.EQUALS,
+            Token.IDENTIFIER,
+            Token.COMMA,
+            Token.RARROW,
+            Token.HASH,
+            Token.STAR,
+            Token.QUOTE)
+
+    let beforeTypeApplication =
+        NodeTypeSet
+           (Token.DELEGATE,
+            Token.IDENTIFIER,
+            Token.IEEE64,
+            Token.IEEE32,
+            Token.DECIMAL,
+            Token.SBYTE,
+            Token.INT16,
+            Token.INT32,
+            Token.INT64,
+            Token.NATIVEINT,
+            Token.BYTE,
+            Token.UINT16,
+            Token.UINT32,
+            Token.UINT64,
+            Token.BIGNUM)
+
+    let adjacentPrefixTokens =
+        NodeTypeSet
+           (Token.MINUS,
+            Token.PLUS,
+            Token.PERCENT,
+            Token.PERCENT_PERCENT,
+            Token.AMP,
+            Token.AMP_AMP)
+
+    let signedDigits =
+        NodeTypeSet
+           (Token.SBYTE,
+            Token.INT16,
+            Token.INT32,
+            Token.INT64,
+            Token.NATIVEINT,
+            Token.IEEE32,
+            Token.IEEE64,
+            Token.DECIMAL,
+            Token.BIGNUM)
+
+    let controlFlow =
+        NodeTypeSet
+           (Token.TRY,
+            Token.MATCH,
+            Token.MATCH_BANG,
+            Token.IF,
+            Token.LET,
+            Token.LET_BANG,
+            Token.FOR,
+            Token.WHILE)
+
+    let forcesHeadContextClosure =
+        NodeTypeSet
+           (Token.END,
+            Token.ELSE,
+            Token.ELIF,
+            Token.DONE,
+            Token.IN,
+            Token.RPAREN,
+            Token.BEGIN_TYPE_APP,
+            Token.RBRACE,
+            Token.RBRACK,
+            Token.BAR_RBRACK,
+            Token.WITH,
+            Token.FINALLY,
+            Token.RQUOTE_TYPED,
+            Token.RQUOTE_UNTYPED)
 
     let isInfix token = infix.[token]
     let isNonAssocInfixToken token = token == Token.EQUALS
@@ -125,8 +314,17 @@ module Postprocessing =
     let isParenTokensBalance leftToken rightToken =
         leftToken <> null && rightToken <> null && parenTokensBalance.[leftToken] == rightToken
     let isLeftBraceBrack token = leftBraceBrack.[token]
+    let isLeftParenBegin token = leftParenBegin.[token]
     let isLeftParen token = leftParen.[token]
     let isSigStructBegin token = sigStructBegin.[token]
     let isLeftBraceBrackAndBeginTypeApp token = leftBraceBrackAndBeginTypeApp.[token]
     let isClassStructInterface token = classStructInterface.[token]
     let isLeftParenBrackAndBegin token = leftParenBrackAndBegin.[token]
+    let isLeftParenBrackLess token = leftParenBrackLess.[token]
+    let isGrammarInTypes token = grammarInTypes.[token]
+    let isBeforeTypeApplication token = beforeTypeApplication.[token]
+    let isAdjacentPrefixTokens token = adjacentPrefixTokens.[token]
+    let isSignedDigits token = signedDigits.[token]
+    let isControlFlow token = controlFlow.[token]
+    let isSemiSemi token = token == Token.SEMICOLON_SEMICOLON
+    let isForcesHeadContextClosure token = forcesHeadContextClosure.[token]

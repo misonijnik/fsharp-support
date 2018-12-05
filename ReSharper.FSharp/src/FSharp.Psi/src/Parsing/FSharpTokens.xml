@@ -186,6 +186,7 @@
         <Token name="IDENTIFIER" />
         <Token name="SYMBOLIC_OP" />
         <Token name="BAD_SYMBOLIC_OP" />
+        <Token name="ADJACENT_PREFIX_OP" />
         <Token name="INFIX_STAR_STAR_OP" />
         <Token name="BAD_INFIX_STAR_STAR_OP" />
         <Token name="INFIX_STAR_DIV_MOD_OP" />

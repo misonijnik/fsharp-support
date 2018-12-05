@@ -11,6 +11,7 @@
     <Compile Include="src\Util\ImmutableStack.fs" />
     <Compile Include="src\Parsing\Lexing\Postprocessing.fs" />
     <Compile Include="src\Parsing\Lexing\Context.fs" />
+    <Compile Include="src\Parsing\Lexing\LexicalFilter.fs" />
     <Compile Include="src\CodeCompletion\CompletionUtil.fs" />
     <Compile Include="src\CodeCompletion\FSharpCodeCompletionContext.fs" />
     <Compile Include="src\CodeCompletion\FSharpPathCompletionProvider.fs" />

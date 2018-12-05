@@ -15,6 +15,20 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing.Lexing
     public int yy_buffer_start;
     public int yy_buffer_end;
     public int yy_lexical_state;
+
+    public FSharpLexerState(
+      TokenNodeType currTokenType,
+      int yy_buffer_index,
+      int yy_buffer_start,
+      int yy_buffer_end,
+      int yy_lexical_state)
+    {
+      this.currTokenType = currTokenType;
+      this.yy_buffer_index = yy_buffer_index;
+      this.yy_buffer_start = yy_buffer_start;
+      this.yy_buffer_end = yy_buffer_end;
+      this.yy_lexical_state = yy_lexical_state;
+    }
   }
 
   partial class FSharpLexerGenerated : ILexer<FSharpLexerState>

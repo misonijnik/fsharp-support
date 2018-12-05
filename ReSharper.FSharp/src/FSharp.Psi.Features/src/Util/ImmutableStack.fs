@@ -5,7 +5,7 @@ module ImmutableStack =
     open System
 
     let isEmpty (stack : ImmutableStack<_>) = stack.IsEmpty
-    let count (stack : ImmutableStack<_>) = stack.GetCount ()
+    let length (stack : ImmutableStack<_>) = stack.GetCount ()
 
     let mutablePush (stack : outref<ImmutableStack<_>>) value =
         stack <- stack.Push value
