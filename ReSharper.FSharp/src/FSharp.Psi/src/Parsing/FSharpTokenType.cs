@@ -102,7 +102,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
     public static readonly TokenNodeType NEW_LINE = new NewLineNodeType(NEW_LINE_NODE_TYPE_INDEX);
 
     public const int ODUMMY_NODE_TYPE_INDEX = LAST_GENERATED_TOKEN_TYPE_INDEX + 3;
-    public static readonly TokenNodeType ODUMMY = new DummyNodeType(ODUMMY_NODE_TYPE_INDEX);
+    public static readonly DummyNodeType ODUMMY = new DummyNodeType(ODUMMY_NODE_TYPE_INDEX);
 
     public static readonly NodeTypeSet RightBraces;
     public static readonly NodeTypeSet LeftBraces;

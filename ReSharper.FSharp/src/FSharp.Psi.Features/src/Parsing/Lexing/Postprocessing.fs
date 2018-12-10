@@ -69,7 +69,6 @@ module Postprocessing =
 
     let rec suffixExists p l = if isEmpty l then false else p (pop l) || suffixExists p (pop l)
 
-
     let odeclend = NodeTypeSet (Token.ORIGHT_BLOCK_END, Token.OBLOCKEND, Token.ODECLEND)
     let infix =
         NodeTypeSet
@@ -276,22 +275,36 @@ module Postprocessing =
             Token.FOR,
             Token.WHILE)
 
-    let forcesHeadContextClosure =
+    let balancingRule =
         NodeTypeSet
            (Token.END,
-            Token.ELSE,
-            Token.ELIF,
-            Token.DONE,
-            Token.IN,
             Token.RPAREN,
-            Token.BEGIN_TYPE_APP,
             Token.RBRACE,
             Token.RBRACK,
             Token.BAR_RBRACK,
-            Token.WITH,
-            Token.FINALLY,
             Token.RQUOTE_TYPED,
-            Token.RQUOTE_UNTYPED)
+            Token.RQUOTE_UNTYPED,
+            Token.BEGIN_TYPE_APP)
+
+    let namespaceDotRecGlobal = NodeTypeSet (Token.NAMESPACE, Token.DOT, Token.REC, Token.GLOBAL)
+    let recIdentifier = NodeTypeSet (Token.REC, Token.IDENTIFIER)
+    let recIdentifierGlobal = NodeTypeSet (Token.GLOBAL) |> recIdentifier.Union
+
+    let forcesHeadContextClosure =
+        NodeTypeSet
+           (Token.ELSE,
+            Token.ELIF,
+            Token.DONE,
+            Token.IN,
+            Token.WITH,
+            Token.FINALLY)
+     |> balancingRule.Union
+
+    let accessModifier = NodeTypeSet (Token.PUBLIC, Token.PRIVATE, Token.INTERNAL)
+    let moduleDotRec = NodeTypeSet (Token.MODULE, Token.DOT, Token.REC)
+
+    let valStaticAbstractMemberOverrideDefault =
+        NodeTypeSet (Token.VAL, Token.STATIC, Token.ABSTRACT, Token.MEMBER, Token.OVERRIDE, Token.DEFAULT)
 
     let isInfix token = infix.[token]
     let isNonAssocInfixToken token = token == Token.EQUALS
@@ -299,14 +312,14 @@ module Postprocessing =
     let isTryBlockContinuator token = tryBlockContinuator.[handleDummy token]
     let isThenBlockContinuator token = thenBlockContinuator.[handleDummy token]
     let isDoContinuator token = doneDeclEnd.[handleDummy token]
+    let isInterfaceContinuator token = interfaceContinuator.[handleDummy token]
     let isNamespaceContinuator token = not notNamespaceContinuator.[handleDummy token]
     let isTypeContinuator token = typeContinuator.[handleDummy token]
     let isForLoopContinuator token = doneDeclEnd.[handleDummy token]
     let isWhileBlockContinuator token = doneDeclEnd.[handleDummy token]
     let isLetContinuator token = andDeclEnd.[handleDummy token]
     let isTypeSeqBlockElementContinuator token = typeSeqBlockElementContinuator.[handleDummy token]
-    let isSeqBlockElementContinuator token =
-        isInfix token || seqBlockElementContinuator.[handleDummy token]
+    let isSeqBlockElementContinuator token = (|INFIX|) token || seqBlockElementContinuator.[handleDummy token]
     let isWithAugmentBlockContinuator token = handleDummy token == Token.END
     let isLongIdentifier token = longIdentifier.[token]
     let isLongIdentifierOrGlobal token = longIdentifierOrGlobal.[token]
@@ -328,3 +341,9 @@ module Postprocessing =
     let isControlFlow token = controlFlow.[token]
     let isSemiSemi token = token == Token.SEMICOLON_SEMICOLON
     let isForcesHeadContextClosure token = forcesHeadContextClosure.[token]
+    let isBalancingRule token = balancingRule.[token]
+    let isTransitionRule leftToken rightToken = namespaceDotRecGlobal.[leftToken] && recIdentifierGlobal.[rightToken]
+    let isAccessModifier token = accessModifier.[token]
+    let isModuleDotRec token = moduleDotRec.[token]
+    let isRecIdentifier token = recIdentifier.[token]
+    let isValStaticAbstractMemberOverrideDefault token = valStaticAbstractMemberOverrideDefault.[token]

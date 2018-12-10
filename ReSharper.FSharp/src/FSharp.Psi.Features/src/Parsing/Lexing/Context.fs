@@ -72,6 +72,8 @@ type Context =
 module Context =
     open ImmutableStack
     let dummyCtxt = CtxtDo (Position ())
+    let getCtxt stackLength stack n = if stackLength >= n then peekN n stack else dummyCtxt
+
     let isVanilla = function
         | CtxtVanilla _ -> true
         | _ -> false
@@ -101,57 +103,56 @@ module Context =
 
     let rec unindentationLimit (newCtxt : Context) strict (stack : ImmutableStack<Context>) =
         let stackLength = length stack
-        let getCtxt n =
-            if stackLength >= n then peekN n stack else dummyCtxt
+        let getCtxt n = getCtxt stackLength stack n
         if stackLength = 0 then PositionWithColumn(newCtxt.StartPos, -1) else
             match newCtxt, peek stack, getCtxt 2, getCtxt 3, getCtxt 4 with
             | _, CtxtVanilla _, _, _, _ -> unindentationLimit newCtxt strict (pop stack)
             | _, CtxtSeqBlock _, _, _, _
             | _, CtxtParen _, _, _, _ when not strict -> unindentationLimit newCtxt strict (pop stack)
-            | _,  (CtxtMatch _ as ctxt1), CtxtSeqBlock _, (CtxtParen(token, _) as ctxt2), _
-                when stackLength >= 3 && (Token.BEGIN == token || Token.LPAREN == token) ->
+            | _,  (CtxtMatch _ as ctxt1), CtxtSeqBlock _, (CtxtParen(token, _) as ctxt2), _ when
+                stackLength >= 3 && (Token.BEGIN == token || Token.LPAREN == token) ->
                     if ctxt1.StartCol <= ctxt2.StartCol 
                          then PositionWithColumn(ctxt1.StartPos, ctxt2.StartCol) 
                          else PositionWithColumn(ctxt1.StartPos, ctxt2.StartCol)
-            | CtxtMatchClauses _, CtxtFunction _, CtxtSeqBlock _, (CtxtLetDecl _ as limitCtxt), _
-                when stackLength >= 3 -> PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol)
+            | CtxtMatchClauses _, CtxtFunction _, CtxtSeqBlock _, (CtxtLetDecl _ as limitCtxt), _ when
+                stackLength >= 3 -> PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol)
             | CtxtMatchClauses _, CtxtFunction _, _, _, _ -> unindentationLimit newCtxt strict (pop stack)
             | _, CtxtMatchClauses _, (CtxtTry _ as limitCtxt), _, _ when stackLength >= 2 ->
                 PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol)
             | _, CtxtFun _, _, _, _ -> unindentationLimit newCtxt false (pop stack)
-            | _, CtxtParen (token,_), CtxtSeqBlock _, _, _
-                when stackLength >= 2 && Postprocessing.isLeftBraceBrack token ->
+            | _, CtxtParen (token,_), CtxtSeqBlock _, _, _ when
+                stackLength >= 2 && Postprocessing.isLeftBraceBrack token ->
                     unindentationLimit newCtxt false (pop stack)
-            | _, CtxtParen (token,_), CtxtVanilla _, CtxtSeqBlock _, _
-                when stackLength >= 3 && Postprocessing.isLeftBraceBrack token ->
+            | _, CtxtParen (token,_), CtxtVanilla _, CtxtSeqBlock _, _ when
+                stackLength >= 3 && Postprocessing.isLeftBraceBrack token ->
                     unindentationLimit newCtxt false (pop stack)
-            | _, CtxtSeqBlock _, CtxtParen (token,_), CtxtVanilla _, CtxtSeqBlock _
-                when stackLength >= 4 && Postprocessing.isLeftBraceBrack token ->
+            | _, CtxtSeqBlock _, CtxtParen (token,_), CtxtVanilla _, CtxtSeqBlock _ when
+                stackLength >= 4 && Postprocessing.isLeftBraceBrack token ->
                     unindentationLimit newCtxt false (pop stack)
-            | CtxtSeqBlock _, CtxtElse _, (CtxtIf _ as limitCtxt), _, _
-                when stackLength >= 2 -> PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol)
+            | CtxtSeqBlock _, CtxtElse _, (CtxtIf _ as limitCtxt), _, _ when
+                stackLength >= 2 -> PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol)
             | CtxtWithAsAugment _, ((CtxtInterfaceHead _ | CtxtMemberHead _ | CtxtException _ | CtxtTypeDefns _) as limitCtxt), _, _, _ ->
                 PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol)
             | _, (CtxtWithAsAugment _ | CtxtThen _ | CtxtElse _ | CtxtDo _ ), _, _, _
             | _, CtxtFunction _, _, _, _ -> unindentationLimit newCtxt false (pop stack)
-            | _, CtxtParen (token, _), CtxtSeqBlock _, (CtxtModuleBody (_, false) as limitCtxt), _
-                when stackLength >= 3 && Postprocessing.isSigStructBegin token ->
+            | _, CtxtParen (token, _), CtxtSeqBlock _, (CtxtModuleBody (_, false) as limitCtxt), _ when
+                stackLength >= 3 && Postprocessing.isSigStructBegin token ->
                     PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol + 1)
             | _, CtxtParen (token ,_), CtxtSeqBlock _, CtxtThen _, (CtxtIf _ as limitCtxt)
-            | _, CtxtParen (token ,_), CtxtSeqBlock _, CtxtElse _, (CtxtIf _ as limitCtxt)
-                when stackLength >= 4 && Postprocessing.isLeftParenBegin token ->
+            | _, CtxtParen (token ,_), CtxtSeqBlock _, CtxtElse _, (CtxtIf _ as limitCtxt) when
+                stackLength >= 4 && Postprocessing.isLeftParenBegin token ->
                     PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol + 1)
-            | _, CtxtParen (token, _), CtxtVanilla _, (CtxtSeqBlock _ as limitCtxt), _
-                when stackLength >= 3 && Postprocessing.isLeftBraceBrackAndBeginTypeApp token ->
+            | _, CtxtParen (token, _), CtxtVanilla _, (CtxtSeqBlock _ as limitCtxt), _ when
+                stackLength >= 3 && Postprocessing.isLeftBraceBrackAndBeginTypeApp token ->
                     PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol + 1)
-            | _, CtxtParen (token, _), CtxtSeqBlock _, (CtxtTypeDefns _ as limitCtxt), _
-                when stackLength >= 3 && Postprocessing.isClassStructInterface token ->
+            | _, CtxtParen (token, _), CtxtSeqBlock _, (CtxtTypeDefns _ as limitCtxt), _ when
+                stackLength >= 3 && Postprocessing.isClassStructInterface token ->
                     PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol + 1)
-            | _, CtxtSeqBlock _, CtxtParen (token, _), CtxtVanilla _, (CtxtSeqBlock _ as limitCtxt)
-                when stackLength >= 4 && Postprocessing.isLeftParenBrackAndBegin token ->
+            | _, CtxtSeqBlock _, CtxtParen (token, _), CtxtVanilla _, (CtxtSeqBlock _ as limitCtxt) when
+                stackLength >= 4 && Postprocessing.isLeftParenBrackAndBegin token ->
                     PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol + 1)
-            | CtxtSeqBlock _, CtxtParen (token ,_), CtxtSeqBlock _, ((CtxtTypeDefns _ | CtxtLetDecl _ | CtxtMemberBody _ | CtxtWithAsLet _) as limitCtxt), _
-                when stackLength >= 3 && Postprocessing.isLeftParenBrackAndBegin token ->
+            | CtxtSeqBlock _, CtxtParen (token ,_), CtxtSeqBlock _, ((CtxtTypeDefns _ | CtxtLetDecl _ | CtxtMemberBody _ | CtxtWithAsLet _) as limitCtxt), _ when
+                stackLength >= 3 && Postprocessing.isLeftParenBrackAndBegin token ->
                     PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol + 1)
             | (CtxtIf   _ | CtxtElse _ | CtxtThen _), (CtxtIf _ as limitCtxt), _, _, _
             | CtxtDo _, ((CtxtFor  _ | CtxtWhile _) as limitCtxt), _, _, _ ->
@@ -178,14 +179,13 @@ module Context =
             | _, (CtxtMatchClauses _ as limitCtxt), _, _, _
             | _, (CtxtSeqBlock _ as limitCtxt), _, _, _ -> PositionWithColumn(limitCtxt.StartPos, limitCtxt.StartCol)
 
-    let pushCtxt tokenTup (newCtxt:Context) (stack : byref<_>) =
+    let pushCtxt tokenTup newCtxt (stack : byref<_>) =
         match newCtxt with
         | CtxtVanilla _ -> ()
         | _ ->
             let p1 = unindentationLimit newCtxt true stack
             let c2 = newCtxt.StartCol
-            if c2 < p1.Column then
-                () //todo: give good warnings, context is undented [misonijnik]
+            if c2 < p1.Column then () //todo: give good warnings, context is undented [misonijnik]
         stack <- push stack newCtxt
 
     let popCtxt (stack : byref<_>) = if isEmpty stack then () else mutablePop &stack |> ignore
@@ -196,8 +196,7 @@ module Context =
 
     let tokenBalancesHeadContext token stack =
         let stackLength = length stack
-        let getCtxt n =
-            if stackLength >= n then peekN n stack else dummyCtxt
+        let getCtxt n = getCtxt stackLength stack n
         if stackLength = 0 then false else
             match token, peek stack, getCtxt 2 with
             | endToken, CtxtWithAsAugment _, _ when endToken == Token.END -> true
@@ -249,3 +248,33 @@ module Context =
             || (Postprocessing.isForcesHeadContextClosure token
                 && not (tokenBalancesHeadContext token stack)
                 && Postprocessing.suffixExists (tokenBalancesHeadContext token) stack))
+
+    let grace (lexer : ILexer) (offsidePos : Position) token stack =
+        let otherResult () =
+            if Postprocessing.isInfix token then lexer.GetTokenLength () + 1 else 0
+        if length stack = 0 then otherResult ()
+        else
+            match token, peek stack with
+            | barToken, CtxtTypeDefns _ when barToken == Token.BAR -> 2
+            | _, CtxtTypeDefns posType when
+                offsidePos.Column = posType.Column
+             && not (Postprocessing.isTypeSeqBlockElementContinuator token) -> -1
+            | namespaceToken, CtxtNamespaceBody posNamespace when
+                offsidePos.Column = posNamespace.Column
+             && namespaceToken == Token.NAMESPACE -> -1
+            | _ -> otherResult ()
+
+    let isNamespaceOrModuleBodyHead stack =
+        length stack >= 1
+     && match peek stack with
+        | CtxtNamespaceBody _
+        | CtxtModuleBody (_, true) -> true
+        | _ -> false
+
+    let ruleForSeqBlockIsExecuted token stack =
+        let res =
+            match getCtxt (length stack) stack 1 with
+            | CtxtNamespaceBody _ -> token == Token.NAMESPACE
+            | CtxtTypeDefns _ -> Postprocessing.isTypeSeqBlockElementContinuator token
+            | _ -> Postprocessing.isSeqBlockElementContinuator token
+        not res

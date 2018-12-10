@@ -33,6 +33,7 @@
         <Token name="GLOBAL" representation="global" />
         <Token name="IF" representation="if" />
         <Token name="IN" representation="in" />
+        <Token name="JOIN_IN" representation="in" />
         <Token name="INHERIT" representation="inherit" />
         <Token name="INLINE" representation="inline" />
         <Token name="INTERFACE" representation="interface" />
@@ -148,37 +149,6 @@
         <Token name="PP_NOT" representation="!" />
         <Token name="PP_LPAR" representation="(" />
         <Token name="PP_RPAR" representation=")" />
-
-        <Token name="TYPE_COMING_SOON" representation="" />
-        <Token name="TYPE_IS_HERE" representation="" />
-        <Token name="MODULE_COMING_SOON" representation="" />
-        <Token name="MODULE_IS_HERE" representation="" />
-        <Token name="HIGH_PRECEDENCE_BRACK_APP" representation="" />
-        <Token name="HIGH_PRECEDENCE_PAREN_APP" representation="" />
-        <Token name="HIGH_PRECEDENCE_TYAPP" representation="" />
-        <Token name="OLET" representation="" />
-        <Token name="OLET_BANG" representation="" />
-        <Token name="OUSE" representation="" />
-        <Token name="OUSE_BANG" representation="" />
-        <Token name="ODO" representation="" />
-        <Token name="ODO_BANG" representation="" />
-        <Token name="OTHEN" representation="" />
-        <Token name="OELSE" representation="" />
-        <Token name="OFUNCTION" representation="" />
-        <Token name="OFUN" representation="" />
-        <Token name="ORESET" representation="" />
-        <Token name="OBLOCKBEGIN" representation="" />
-        <Token name="OBLOCKSEP" representation="" />
-
-        <Token name="OEND" representation="" />
-        <Token name="ODECLEND" representation="" />
-        <Token name="ORIGHT_BLOCK_END" representation="" />
-        <Token name="OBLOCKEND" representation="" />
-        <Token name="OBLOCKEND_COMING_SOON" representation="" />
-        <Token name="OBLOCKEND_IS_HERE" representation="" />
-
-        <Token name="OINTERFACE_MEMBER" representation="" />        
-
         <Token name="EOF" representation="" />        
 </Tokens>
 
@@ -210,6 +180,36 @@
         <Token name="HASH" />
         <Token name="TEXT" />
         <Token name="DEAD_CODE" />
+
+        <Token name="TYPE_COMING_SOON" />
+        <Token name="TYPE_IS_HERE" />
+        <Token name="MODULE_COMING_SOON" />
+        <Token name="MODULE_IS_HERE" />
+        <Token name="HIGH_PRECEDENCE_BRACK_APP" />
+        <Token name="HIGH_PRECEDENCE_PAREN_APP" />
+        <Token name="HIGH_PRECEDENCE_TYAPP" />
+        <Token name="OLET" />
+        <Token name="OLET_BANG" />
+        <Token name="OUSE" />
+        <Token name="OUSE_BANG" />
+        <Token name="ODO" />
+        <Token name="ODO_BANG" />
+        <Token name="OTHEN" />
+        <Token name="OELSE" />
+        <Token name="OFUNCTION" />
+        <Token name="OFUN" />
+        <Token name="ORESET" />
+        <Token name="OBLOCKBEGIN" />
+        <Token name="OBLOCKSEP" />
+        <Token name="OEND" />
+        <Token name="ODECLEND" />
+        <Token name="ORIGHT_BLOCK_END" />
+        <Token name="OBLOCKEND" />
+        <Token name="OBLOCKEND_COMING_SOON" />
+        <Token name="OBLOCKEND_IS_HERE" />
+        <Token name="OINTERFACE_MEMBER" />
+        <Token name="OLAZY" />
+        <Token name="OASSERT" />
 
         <Token name="IEEE32" />
         <Token name="IEEE64" />
