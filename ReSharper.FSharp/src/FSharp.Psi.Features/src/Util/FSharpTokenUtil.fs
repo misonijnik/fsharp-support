@@ -80,25 +80,30 @@ module FSharpTokenUtil =
     let (|YIELD|) token = token == Token.YIELD
     let (|YIELD_BANG|) token = token == Token.YIELD_BANG
     let (|UNDERSCORE|) token = token == Token.UNDERSCORE
+
     let (|GREATER|) token = token == Token.GREATER
     let (|LESS|) token = token == Token.LESS
     let (|BEGIN_TYPE_APP|) token = token == Token.BEGIN_TYPE_APP
     let (|END_TYPE_APP|) token = token == Token.END_TYPE_APP
+
     let (|LPAREN|) token = token == Token.LPAREN
     let (|RPAREN|) token = token == Token.RPAREN
     let (|LBRACE|) token = token == Token.LBRACE
     let (|RBRACE|) token = token == Token.RBRACE
     let (|LBRACK|) token = token == Token.LBRACK
     let (|RBRACK|) token = token == Token.RBRACK
+
     let (|LBRACK_LESS|) token = token == Token.LBRACK_LESS
     let (|GREATER_BAR_RBRACK|) token = token == Token.GREATER_BAR_RBRACK
     let (|GREATER_RBRACK|) token = token == Token.GREATER_RBRACK
     let (|LBRACK_BAR|) token = token == Token.LBRACK_BAR
     let (|BAR_RBRACK|) token = token == Token.BAR_RBRACK
+
     let (|LQUOTE_UNTYPED|) token = token == Token.LQUOTE_UNTYPED
     let (|RQUOTE_UNTYPED|) token = token == Token.RQUOTE_UNTYPED
     let (|LQUOTE_TYPED|) token = token == Token.LQUOTE_TYPED
     let (|RQUOTE_TYPED|) token = token == Token.RQUOTE_TYPED
+
     let (|AMP|) token = token == Token.AMP
     let (|AMP_AMP|) token = token == Token.AMP_AMP
     let (|BAR|) token = token == Token.BAR
@@ -126,10 +131,13 @@ module FSharpTokenUtil =
     let (|QMARK|) token = token == Token.QMARK
     let (|QMARK_QMARK|) token = token == Token.QMARK_QMARK
     let (|QUOTE|) token = token == Token.QUOTE
+
     let (|PLUS|) token = token == Token.PLUS
+
     let (|KEYWORD_STRING_SOURCE_DIRECTORY|) token = token == Token.KEYWORD_STRING_SOURCE_DIRECTORY
     let (|KEYWORD_STRING_SOURCE_FILE|) token = token == Token.KEYWORD_STRING_SOURCE_FILE
     let (|KEYWORD_STRING_LINE|) token = token == Token.KEYWORD_STRING_LINE
+
     let (|PP_HELP|) token = token == Token.PP_HELP
     let (|PP_QUIT|) token = token == Token.PP_QUIT
     let (|PP_TIME|) token = token == Token.PP_TIME
@@ -138,12 +146,14 @@ module FSharpTokenUtil =
     let (|PP_ELSE_SECTION|) token = token == Token.PP_ELSE_SECTION
     let (|PP_ENDIF|) token = token == Token.PP_ENDIF
     let (|PP_NOWARN|) token = token == Token.PP_NOWARN
+
     let (|PP_OR|) token = token == Token.PP_OR
     let (|PP_AND|) token = token == Token.PP_AND
     let (|PP_NOT|) token = token == Token.PP_NOT
     let (|PP_LPAR|) token = token == Token.PP_LPAR
     let (|PP_RPAR|) token = token == Token.PP_RPAR
     let (|EOF|) token = token == Token.EOF
+
     let (|IDENTIFIER|) token = token == Token.IDENTIFIER
     let (|SYMBOLIC_OP|) token = token == Token.SYMBOLIC_OP
     let (|BAD_SYMBOLIC_OP|) token = token == Token.BAD_SYMBOLIC_OP
@@ -171,6 +181,7 @@ module FSharpTokenUtil =
     let (|HASH|) token = token == Token.HASH
     let (|TEXT|) token = token == Token.TEXT
     let (|DEAD_CODE|) token = token == Token.DEAD_CODE
+
     let (|TYPE_COMING_SOON|) token = token == Token.TYPE_COMING_SOON
     let (|TYPE_IS_HERE|) token = token == Token.TYPE_IS_HERE
     let (|MODULE_COMING_SOON|) token = token == Token.MODULE_COMING_SOON
@@ -200,6 +211,7 @@ module FSharpTokenUtil =
     let (|OINTERFACE_MEMBER|) token = token == Token.OINTERFACE_MEMBER
     let (|OLAZY|) token = token == Token.OLAZY
     let (|OASSERT|) token = token == Token.OASSERT
+
     let (|IEEE32|) token = token == Token.IEEE32
     let (|IEEE64|) token = token == Token.IEEE64
     let (|DECIMAL|) token = token == Token.DECIMAL
@@ -214,10 +226,12 @@ module FSharpTokenUtil =
     let (|BIGNUM|) token = token == Token.BIGNUM
     let (|NATIVEINT|) token = token == Token.NATIVEINT
     let (|UNATIVEINT|) token = token == Token.UNATIVEINT
+
     let (|UNFINISHED_BLOCK_COMMENT|) token = token == Token.UNFINISHED_BLOCK_COMMENT
     let (|UNFINISHED_STRING_IN_COMMENT|) token = token == Token.UNFINISHED_STRING_IN_COMMENT
     let (|UNFINISHED_VERBATIM_STRING_IN_COMMENT|) token = token == Token.UNFINISHED_VERBATIM_STRING_IN_COMMENT
     let (|UNFINISHED_TRIPLE_QUOTED_STRING_IN_COMMENT|) token = token == Token.UNFINISHED_TRIPLE_QUOTED_STRING_IN_COMMENT
+
     let (|CHARACTER_LITERAL|) token = token == Token.CHARACTER_LITERAL
     let (|STRING|) token = token == Token.STRING
     let (|VERBATIM_STRING|) token = token == Token.VERBATIM_STRING
@@ -225,14 +239,18 @@ module FSharpTokenUtil =
     let (|BYTEARRAY|) token = token == Token.BYTEARRAY
     let (|VERBATIM_BYTEARRAY|) token = token == Token.VERBATIM_BYTEARRAY
     let (|BYTECHAR|) token = token == Token.BYTECHAR
+
     let (|UNFINISHED_STRING|) token = token == Token.UNFINISHED_STRING
     let (|UNFINISHED_VERBATIM_STRING|) token = token == Token.UNFINISHED_VERBATIM_STRING
     let (|UNFINISHED_TRIPLE_QUOTED_STRING|) token = token == Token.UNFINISHED_TRIPLE_QUOTED_STRING
+
     let (|RESERVED_LITERAL_FORMATS|) token = token == Token.RESERVED_LITERAL_FORMATS
     let (|RESERVED_SYMBOLIC_SEQUENCE|) token = token == Token.RESERVED_SYMBOLIC_SEQUENCE
     let (|RESERVED_IDENT_FORMATS|) token = token == Token.RESERVED_IDENT_FORMATS
+
     let (|BAD_TAB|) token = token == Token.BAD_TAB
     let (|BAD_CHARACTER|) token = token == Token.BAD_CHARACTER
+
     let (|PP_LOAD|) token = token == Token.PP_LOAD
     let (|PP_REFERENCE|) token = token == Token.PP_REFERENCE
     let (|PP_LINE|) token = token == Token.PP_LINE
@@ -240,3 +258,5 @@ module FSharpTokenUtil =
     let (|PP_CONDITIONAL_SYMBOL|) token = token == Token.PP_CONDITIONAL_SYMBOL
     let (|PP_DIRECTIVE|) token = token == Token.PP_DIRECTIVE
     let (|PP_BAD_CHARACTER|) token = token == Token.PP_BAD_CHARACTER
+
+    let (|ODUMMY|) token = token == Token.ODUMMY

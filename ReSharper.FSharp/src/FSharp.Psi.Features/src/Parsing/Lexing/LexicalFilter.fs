@@ -13,16 +13,19 @@ type FSharpLexicalFilterState =
     val PreviousTokenTup : TokenTup
     val DelayedTokens : ImmutableStack<TokenTup>
     val ContextStack : ImmutableStack<Context>
-    new (currTokenTup, previousTokenTup, delayedTokens, contextStack) =
+    val TokensThatNeedNoProcessingCount : int
+    new (currTokenTup, previousTokenTup, delayedTokens, contextStack, tokensThatNeedNoProcessingCount) =
         { CurrentTokenTup = currTokenTup;
           PreviousTokenTup = previousTokenTup;
           DelayedTokens = delayedTokens;
-          ContextStack = contextStack; }
+          ContextStack = contextStack;
+          TokensThatNeedNoProcessingCount = tokensThatNeedNoProcessingCount; }
 
 open ImmutableStack
+open FSharpTokenUtil
 open Context
 open Postprocessing
-type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
+type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib, lightSyntaxStatus) =
     let myLexer = FSharpLexer buffer
     let tokenTupToState (token : TokenTup) =
         FSharpLexerState
@@ -61,10 +64,15 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
              internalPosition.yy_lexical_state)
 
     let getCurrentPosition () =
-        FSharpLexicalFilterState (getCurrentToken (), previousTokenTup, delayedTokenTups, contextStack)
+        FSharpLexicalFilterState
+            (getCurrentToken (),
+             previousTokenTup,
+             delayedTokenTups,
+             contextStack,
+             tokensThatNeedNoProcessingCount)
 
     let popNextTokenTup () =
-        if not<| isEmpty delayedTokenTups
+        if not <| isEmpty delayedTokenTups
             then
                 let tokenTup = mutablePop &delayedTokenTups
                 myLexer.CurrentPosition <- tokenTupToState tokenTup
@@ -91,6 +99,15 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
      // Adjacency precedence rule
      //----------------------------------------------------------------------------
 
+    let (|INFIX_COMPARE_OP_WITH|) text token =
+        (|INFIX_COMPARE_OP|) token && compareTokenText text
+
+    let (|INFIX_AT_HAT_OP_WITH|) text token =
+        (|INFIX_AT_HAT_OP|) token && compareTokenText text
+
+    let (|INFIX_STAR_DIV_MOD_OP_WITH|) text token =
+        (|INFIX_STAR_DIV_MOD_OP|) token && compareTokenText text
+
     let isAdjacent (leftTokenTup : TokenTup) (rightTokenTup : TokenTup) =
         let lparenStartPos = rightTokenTup.StartPosOfTokenTup ()
         let tokenEndPos = leftTokenTup.EndPosition
@@ -99,9 +116,12 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
     let nextTokenIsAdjacentLParenOrLBrack (tokenTup : TokenTup) (tokenTupOut : byref<_>)=
         let lookaheadTokenTup = peekNextTokenTup ()
         let token = lookaheadTokenTup.CurrentTokenType
-        let res = (Token.LPAREN == token || Token.LBRACK == token) && isAdjacent tokenTup lookaheadTokenTup
-        if res then tokenTupOut <- lookaheadTokenTup
-        res
+        match token with
+        | LPAREN true
+        | LBRACK true when isAdjacent tokenTup lookaheadTokenTup ->
+            tokenTupOut <- lookaheadTokenTup
+            true
+        | _  -> false
 
     let nextTokenIsAdjacent firstTokenTup =
         let lookaheadTokenTup = peekNextTokenTup ()
@@ -110,11 +130,10 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
     let peekAdjacentTypars indentation (tokenTup : TokenTup) =
         let lookaheadTokenTup = peekNextTokenTup ()
         let token = lookaheadTokenTup.CurrentTokenType
-        if
-            not (token == Token.INFIX_COMPARE_OP && compareTokenText "</"
-         || token == Token.LESS || token == Token.BEGIN_TYPE_APP)
-        then false
-        else
+        match token with
+        | INFIX_COMPARE_OP_WITH "</" true
+        | LESS true
+        | BEGIN_TYPE_APP true ->
             let tokenEndPos = tokenTup.EndPosition
             if isAdjacent tokenTup lookaheadTokenTup
             then
@@ -125,19 +144,21 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
                     mutablePush &stack lookaheadTokenTup
                     let lookaheadTokenStartPos = lookaheadTokenTup.StartPosOfTokenTup ()
                     match lookaheadToken with
-                    | _ when lookaheadToken == Token.EOF || lookaheadToken == Token.SEMICOLON_SEMICOLON -> false
+                    | EOF true
+                    | SEMICOLON_SEMICOLON true -> false
                     | _ when indentation && lookaheadTokenStartPos < tokenEndPos -> false
-                    | _ when lookaheadToken == Token.RPAREN || lookaheadToken == Token. RBRACK ->
+                    | RPAREN true
+                    | RBRACK true ->
                         let nParen = nParen - 1
                         if nParen > 0
                         then scanAhead nParen
                         else false
-                    | _ when
-                        lookaheadToken == Token.GREATER
-                     || lookaheadToken == Token.GREATER_RBRACK
-                     || lookaheadToken == Token.GREATER_BAR_RBRACK ->
+                    | GREATER true
+                    | END_TYPE_APP true
+                    | GREATER_RBRACK true
+                    | GREATER_BAR_RBRACK true ->
                             let nParen = nParen - 1
-                            let hasAfterOp = not (lookaheadToken == Token.GREATER)
+                            let hasAfterOp = not ((|GREATER|) lookaheadToken)
                             if nParen > 0
                             then
                                 mutablePush &stack lookaheadTokenTup
@@ -147,20 +168,21 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
                                 if
                                     not hasAfterOp
                                  && nextTokenIsAdjacentLParenOrLBrack lookaheadTokenTup &nextTokenTup
-                                 && nextTokenTup.CurrentTokenType == Token.LPAREN
+                                 && (|LPAREN|) nextTokenTup.CurrentTokenType
                                 then
                                     let dotTokenTup = peekNextTokenTup()
                                     mutablePush &stack (dotTokenTup.UseStartLocation(Token.HIGH_PRECEDENCE_PAREN_APP))
                                 true
-                    | _ when
-                        isLeftParenBrackLess lookaheadToken
-                     || (token == Token.INFIX_COMPARE_OP && compareTokenText "</") ->
-                            scanAhead (nParen + 1)
-                    | _ when
-                        isGrammarInTypes lookaheadToken
-                     || (token == Token.INFIX_AT_HAT_OP && (compareTokenText "^" || compareTokenText "^-"))
-                     || (token == Token.INFIX_STAR_DIV_MOD_OP && compareTokenText "/") ->
-                            scanAhead nParen
+                    | LPAREN true
+                    | LESS true
+                    | BEGIN_TYPE_APP true
+                    | LBRACK true
+                    | LBRACK_LESS true
+                    | INFIX_COMPARE_OP_WITH "</" true -> scanAhead (nParen + 1)
+                    | GrammarInTypes true
+                    | INFIX_AT_HAT_OP_WITH "^" true
+                    | INFIX_AT_HAT_OP_WITH "^-" true
+                    | INFIX_STAR_DIV_MOD_OP_WITH "/" true -> scanAhead nParen
                     | _ ->
                         if nParen > 1
                         then scanAhead nParen 
@@ -168,49 +190,50 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
 
                 let res = scanAhead 0
                 for tokenTup in stack do
-                    if res && tokenTup.CurrentTokenType == Token.LESS
-                    then
-                        delayTokenTup (tokenTup.UseLocation Token.BEGIN_TYPE_APP)
-                    elif res && tokenTup.CurrentTokenType == Token.GREATER
-                    then
-                        delayTokenTup (tokenTup.UseLocation Token.END_TYPE_APP)
-                    else delayTokenTup tokenTup
+                    let token = tokenTup.CurrentTokenType
+                    match token with
+                    | LESS true when res -> delayTokenTup (tokenTup.UseLocation Token.BEGIN_TYPE_APP)
+                    | GREATER true when res -> delayTokenTup (tokenTup.UseLocation Token.END_TYPE_APP)
+                    | _ -> delayTokenTup tokenTup
                 res
             else false
+        | _ -> false
+            
 
     let returnToken (tokenTup : TokenTup) =
         previousTokenTup <- getCurrentToken ()
         let token = tokenTup.CurrentTokenType
         delayTokenTup tokenTup
-        (popNextTokenTup ()).CurrentTokenType
+        popNextTokenTup ()
 
     let rulesForBothSoftWhiteAndHardWhite (tokenTup : TokenTup) =
+        let (|PLUS_MINUS_OP_WITH|) text token = (|PLUS_MINUS_OP|) token && compareTokenText text
         let mutable lookaheadTokenTup = dummyTokenTup
-        match tokenTup.CurrentTokenType with
-        | token when token == Token.IDENTIFIER && (nextTokenIsAdjacentLParenOrLBrack tokenTup &lookaheadTokenTup) ->
+        let token = tokenTup.CurrentTokenType
+        match token with
+        | IDENTIFIER true when nextTokenIsAdjacentLParenOrLBrack tokenTup &lookaheadTokenTup ->
             let hpa =
                 match lookaheadTokenTup.CurrentTokenType with 
-                | token when token == Token.LPAREN -> Token.HIGH_PRECEDENCE_PAREN_APP
-                |  token when token == Token.LBRACK -> Token.HIGH_PRECEDENCE_BRACK_APP
+                | LPAREN true -> Token.HIGH_PRECEDENCE_PAREN_APP
+                | LBRACK true -> Token.HIGH_PRECEDENCE_BRACK_APP
                 | _ -> failwith "unreachable"
-            delayTokenTup (lookaheadTokenTup.UseStartLocation(hpa))
+            delayTokenTup (lookaheadTokenTup.UseStartLocation (hpa))
             delayTokenTup tokenTup
             true
-        | token when isBeforeTypeApplication token && peekAdjacentTypars false tokenTup ->
-            let lessTokenTup = peekNextTokenTup()
+        | BeforeTypeApplication true when peekAdjacentTypars false tokenTup ->
+            let lessTokenTup = peekNextTokenTup ()
             delayTokenTup (lessTokenTup.UseStartLocation(Token.HIGH_PRECEDENCE_TYAPP))
             delayTokenTup tokenTup
             true
-        | token when
-                (isAdjacentPrefixTokens token
-             || (token == Token.PLUS_MINUS_OP && (compareTokenText "+." || compareTokenText "-."))
-             && nextTokenIsAdjacent tokenTup
+        | AdjacentPrefixTokens true
+        | PLUS_MINUS_OP_WITH "+." true
+        | PLUS_MINUS_OP_WITH "-." true when
+                nextTokenIsAdjacent tokenTup
              && not
                     (isAtomicExprEndToken (previousTokenTup.CurrentTokenType)
-                 && (previousTokenTup.EndPosition = tokenTup.StartPosOfTokenTup ()))) ->
+                 && (previousTokenTup.EndPosition = tokenTup.StartPosOfTokenTup ())) ->
 
-            let plusOrMinus =
-                token == Token.PLUS || token == Token.MINUS
+            let plusOrMinus = (|PLUS|) token || (|MINUS|) token
             let nextTokenTup = popNextTokenTup ()
             let delayMergedToken tok =
                 delayTokenTup (TokenTup
@@ -237,20 +260,21 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
         let tokenReplaced = rulesForBothSoftWhiteAndHardWhite tokenTup
         if tokenReplaced then swTokenFetch() else returnToken tokenTup
 
-    let insertComingSoonTokens (stack : byref<_>) (tokenTup : TokenTup) comingSoom isHere =
+    let insertComingSoonTokens' (tokenTup : TokenTup) comingSoon isHere =
         delayTokenTupNoProcessing (tokenTup.UseLocation isHere)
         for i in 1..6 do
-            delayTokenTupNoProcessing (tokenTup.UseEndLocation comingSoom)
+            delayTokenTupNoProcessing (tokenTup.UseEndLocation comingSoon)
+
+    let insertComingSoonTokens (stack : byref<_>) (tokenTup : TokenTup) comingSoon isHere =
+        insertComingSoonTokens' tokenTup comingSoon isHere
         if not compilingFsLib then 
             let rec nextOuterMostInterestingContextIsNamespaceOrModule stack =
                 let stackLength = length stack
                 let getCtxt n = getCtxt stackLength contextStack n
                 match getCtxt 1, getCtxt 2, getCtxt 3 with
-                | _, (CtxtNamespaceBody _ | CtxtModuleBody _), _
-                    when stackLength >= 2 -> true
-                | _, (CtxtParen (token, _)), CtxtSeqBlock _
-                    when stackLength >= 3 && (token == Token.BEGIN || token == Token.STRUCT) ->
-                        nextOuterMostInterestingContextIsNamespaceOrModule (popN 2 stack)
+                | _, (CtxtNamespaceBody _ | CtxtModuleBody _), _ -> true
+                | _, (CtxtParen ((BEGIN true | STRUCT true), _)), CtxtSeqBlock _ ->
+                    nextOuterMostInterestingContextIsNamespaceOrModule (popN 2 stack)
                 | _ when stackLength = 1 -> true
                 | _ -> false
 
@@ -258,7 +282,7 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
                 not (isEmpty stack) 
              && (not (nextOuterMostInterestingContextIsNamespaceOrModule stack))
              && (match peek stack with
-                | CtxtParen (token, _) when isLeftParen token -> true
+                | CtxtParen (LeftParen true, _) -> true
                 | CtxtSeqBlock _ -> true
                 | CtxtVanilla _ -> true
                 | _ -> false) do
@@ -293,30 +317,35 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
         let tokenStartCol = tokenStartPos.Column
 
         let isSameLine () =
-            if token == Token.EOF then false
-            else ((peekNextTokenTup()).StartPosOfTokenTup ()).Line = tokenStartPos.Line
+            match token with
+            | EOF true -> false
+            | _  -> ((peekNextTokenTup()).StartPosOfTokenTup ()).Line = tokenStartPos.Line
 
         let isControlFlowOrNotSameLine () =
-            if token == Token.EOF then false
-            else not (isSameLine ()) || (isControlFlow (peekNextToken ()))
+            match token with
+            | EOF true -> false
+            | _ -> not (isSameLine ()) || (isControlFlow (peekNextToken ()))
 
         let isLongIdentEquals token =
             let rec isLongIdentEquals' () =
                 let tokenTup = popNextTokenTup()
                 let token = tokenTup.CurrentTokenType
                 let res =
-                    if token == Token.EQUALS || not (token == Token.DOT)
-                    then token == Token.EQUALS
-                    else
+                    match token with
+                    | DOT true ->
                         let tokenTup = popNextTokenTup()
                         let token = tokenTup.CurrentTokenType
                         let res = if token == Token.IDENTIFIER then isLongIdentEquals' () else false
                         delayTokenTup tokenTup
                         res
+                    | EQUALS true -> true
+                    | _ -> false
                 delayTokenTup tokenTup
                 res
-            if not (token == Token.GLOBAL) && not (token == Token.IDENTIFIER) then false 
-            else isLongIdentEquals' ()
+            match token with
+            | GLOBAL true
+            | IDENTIFIER true -> isLongIdentEquals' ()
+            | _ -> false
 
         let reprocess () =
             delayTokenTup tokenTup
@@ -348,6 +377,7 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
         ()
 
         let isSemiSemi = isSemiSemi token
+        let startCol b = if b then tokenStartCol + 1 else tokenStartCol
         let stackLength = length contextStack
         let getCtxt n = getCtxt stackLength contextStack n
 
@@ -359,283 +389,202 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
             popCtxt ()
             let mutable token = null
             if endTokenForACtxt ctxt &token then insertToken token else reprocess ()
-        | semiSemiToken, _, _, _ when semiSemiToken == Token.SEMICOLON_SEMICOLON && stackLength = 0 ->
+        | SEMICOLON_SEMICOLON true, _, _, _ when stackLength = 0 ->
             delayTokenTup (tokenTup.UseEndLocation Token.ORESET)
             returnToken tokenTup
-        | oResetToken, _, _, _ when oResetToken == Token.ORESET && stackLength = 0 ->
+        | ORESET true, _, _, _ when stackLength = 0 ->
             peekInitial () |> ignore
             hwTokenFetch true
-        | inToken, _, _, _ when inToken == Token.IN && detectJoinInContext contextStack ->
+        | IN true, _, _, _ when detectJoinInContext contextStack ->
             returnToken (tokenTup.UseLocation Token.JOIN_IN)
-        | inToken, CtxtLetDecl (blockLet,offsidePos), _, _ when stackLength >= 1 ->
+        | IN true , CtxtLetDecl (blockLet,offsidePos), _, _ ->
             if tokenStartCol < offsidePos.Column then () //todo: give good warnings, context is undented [misonijnik]
             popCtxt ()
-            delayTokenTup (tokenTup.UseEndLocation (Token.ODUMMY.Create inToken))
+            delayTokenTup (tokenTup.UseEndLocation (Token.ODUMMY.Create token))
             returnToken (if blockLet then (tokenTup.UseLocation Token.ODECLEND) else tokenTup)
-        | doneToken, CtxtDo offsidePos, _, _ when doneToken == Token.DONE && stackLength >= 1 ->
+        | DONE true, CtxtDo offsidePos, _, _ ->
             popCtxt ()
             delayTokenTup (tokenTup.UseLocation Token.ODECLEND)
             hwTokenFetch useBlockRule
-        | t2, CtxtParen (t1, _), _, _ when stackLength >= 1 && isBalancingRule t2 && isParenTokensBalance t1 t2 ->
+        |  (BalancingRule true as t2), CtxtParen (t1, _), _, _ when isParenTokensBalance t1 t2 ->
             popCtxt ()
             delayTokenTup (tokenTup.UseEndLocation (Token.ODUMMY.Create t2))
             returnToken tokenTup
-        | endToken, CtxtWithAsAugment offsidePos, _, _ when
-                stackLength >= 1 && not (tokenStartCol + 1 <= offsidePos.Column) ->
-
+        | END true, CtxtWithAsAugment offsidePos, _, _ when not (tokenStartCol + 1 <= offsidePos.Column) ->
             popCtxt ()
-            delayTokenTup (tokenTup.UseEndLocation (Token.ODUMMY.Create endToken))
+            delayTokenTup (tokenTup.UseEndLocation (Token.ODUMMY.Create token))
             returnToken (tokenTup.UseLocation Token.OEND)
-        | token, CtxtNamespaceHead (namespaceTokenPos, prevToken), _, _ when stackLength >= 1 ->
-            if isTransitionRule prevToken token
-                && namespaceTokenPos.Column < tokenStartPos.Column
-                || prevToken == Token.IDENTIFIER && token == Token.DOT
-            then
+        | _, CtxtNamespaceHead (namespaceTokenPos, prevToken), _, _ ->
+            match prevToken, token with
+            | NamespaceDotRecGlobal true, RecIdentifierGlobal true
+            | IDENTIFIER true, DOT true when
+                namespaceTokenPos.Column < tokenStartPos.Column ->
                 replaceCtxt tokenTup (CtxtNamespaceHead (namespaceTokenPos, token))
                 returnToken tokenTup
-            elif token == Token.EOF
-            then
+            | _ ->
                 popCtxt ()
-                returnToken tokenTup
-            else
-                delayTokenTup tokenTup
-                pushCtxt tokenTup (CtxtNamespaceBody namespaceTokenPos)
-                pushCtxtSeqBlockAt tokenTup true AddBlockEnd
-                hwTokenFetch true
-        | token, CtxtModuleHead (moduleTokenPos, prevToken), _, _ when stackLength >= 1 ->
+                match token with
+                | EOF true -> returnToken tokenTup
+                | _ ->
+                    delayTokenTup tokenTup
+                    pushCtxt tokenTup (CtxtNamespaceBody namespaceTokenPos)
+                    pushCtxtSeqBlockAt tokenTup true AddBlockEnd
+                    hwTokenFetch true
+        | _, CtxtModuleHead (moduleTokenPos, prevToken), _, _ ->
             match prevToken, token with
-            | _ when
-                prevToken == Token.MODULE
-             && token == Token.GLOBAL
-             && moduleTokenPos.Column < tokenStartPos.Column ->
-                    replaceCtxt tokenTup (CtxtModuleHead (moduleTokenPos, token))
-                    returnToken tokenTup
-            | _ when
-                prevToken == Token.MODULE
-             && isAccessModifier token
-             && moduleTokenPos.Column < tokenStartPos.Column -> returnToken tokenTup
-            | _ when
-                isModuleDotRec prevToken
-             && isRecIdentifier token
-             && moduleTokenPos.Column < tokenStartPos.Column ->
-                    replaceCtxt tokenTup (CtxtModuleHead (moduleTokenPos, token))
-                    returnToken tokenTup
-            | _ when token == Token.EQUALS && token == Token.COLON ->
+            | MODULE true, GLOBAL true when moduleTokenPos.Column < tokenStartPos.Column ->
+                replaceCtxt tokenTup (CtxtModuleHead (moduleTokenPos, token))
+                returnToken tokenTup
+            | MODULE true, AccessModifier true when moduleTokenPos.Column < tokenStartPos.Column ->
+                returnToken tokenTup
+            | ModuleDotRec true, RecIdentifier true when moduleTokenPos.Column < tokenStartPos.Column ->
+                replaceCtxt tokenTup (CtxtModuleHead (moduleTokenPos, token))
+                returnToken tokenTup
+            | _, (EQUALS true | COLON true) ->
                 popCtxt ()
                 pushCtxt tokenTup (CtxtModuleBody (moduleTokenPos, false))
                 pushCtxtSeqBlock true AddBlockEnd 
                 returnToken tokenTup
             | _ ->
                 popCtxt ()
-                if token == Token.EOF then returnToken tokenTup
-                else
+                match token with
+                | EOF true -> returnToken tokenTup
+                | _ ->
                     delayTokenTup tokenTup
                     pushCtxt tokenTup (CtxtModuleBody (moduleTokenPos,true))
                     pushCtxtSeqBlockAt tokenTup true AddBlockEnd
                     hwTokenFetch false
         | token, CtxtSeqBlock (_, offsidePos, addBlockEnd), _, _ when
-               (let ruleIsExecuted () =
-                    isSemiSemi && isNamespaceOrModuleBodyHead (pop contextStack)
-                 || tokenStartCol + (grace myLexer offsidePos token (pop contextStack)) < offsidePos.Column
-                stackLength >= 1 && ruleIsExecuted ()) ->
+                (isSemiSemi && isNamespaceOrModuleBodyHead (pop contextStack)
+              || tokenStartCol + (grace myLexer offsidePos token (pop contextStack)) < offsidePos.Column) ->
 
             popCtxt ()
             match addBlockEnd with 
             | AddBlockEnd -> insertToken Token.OBLOCKEND
             | AddOneSidedBlockEnd -> insertToken Token.ORIGHT_BLOCK_END
             | NoAddBlockEnd -> reprocess ()
-        | _, CtxtVanilla (offsidePos, _), _, _ when
-                stackLength >= 1
-             && (isSemiSemi || tokenStartCol <= offsidePos.Column) ->
-
+        | _, CtxtVanilla (offsidePos, _), _, _ when isSemiSemi || tokenStartCol <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | greaterRBrackToken, CtxtSeqBlock (NotFirstInSeqBlock, offsidePos, addBlockEnd), _, _ when
-                stackLength >= 1 && greaterRBrackToken == Token.GREATER_RBRACK ->
-
+        | GREATER_RBRACK true, CtxtSeqBlock (NotFirstInSeqBlock, offsidePos, addBlockEnd), _, _ ->
             replaceCtxt tokenTup (CtxtSeqBlock (FirstInSeqBlock, offsidePos, addBlockEnd))
             reprocessWithoutBlockRule ()
-        | _, CtxtSeqBlock (FirstInSeqBlock, offsidePos, addBlockEnd), _, _ when stackLength >= 1 && useBlockRule ->
+        | _, CtxtSeqBlock (FirstInSeqBlock, offsidePos, addBlockEnd), _, _ when useBlockRule ->
             replaceCtxt tokenTup (CtxtSeqBlock (NotFirstInSeqBlock, offsidePos, addBlockEnd))
             reprocessWithoutBlockRule ()
         | token, CtxtSeqBlock (NotFirstInSeqBlock, offsidePos, addBlockEnd), _, _ when
-                stackLength >= 1 && useBlockRule && (ruleForSeqBlockIsExecuted token (pop contextStack))
+                useBlockRule && ruleForSeqBlockIsExecuted token (pop contextStack)
              && tokenStartCol = offsidePos.Column
              && tokenStartPos.Line <> offsidePos.Line ->
 
             replaceCtxt tokenTup (CtxtSeqBlock (FirstInSeqBlock, offsidePos, addBlockEnd))
             insertTokenFromPrevPosToCurrentPos previousTokenTup tokenTup Token.OBLOCKSEP
         | _, CtxtLetDecl (true, offsidePos), _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || (if isLetContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column) ->
-
+                isSemiSemi || startCol (isLetContinuator token) <= offsidePos.Column ->
             popCtxt ()
             insertToken Token.ODECLEND
-        | _, CtxtDo offsidePos, _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || (if isDoContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column) ->
-
+        | _, CtxtDo offsidePos, _, _ when isSemiSemi || startCol (isDoContinuator token) <= offsidePos.Column ->
             popCtxt ()
             insertToken Token.ODECLEND
-        | _, CtxtInterfaceHead offsidePos, _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || (if isInterfaceContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column) ->
-
+        | _, CtxtInterfaceHead offsidePos, _, _ when 
+                isSemiSemi || startCol (isInterfaceContinuator token) <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
         | _, CtxtTypeDefns offsidePos, _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || (if isTypeContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column) ->
-
+                isSemiSemi || startCol (isTypeContinuator token) <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
         | _, CtxtModuleBody (offsidePos, wholeFile), _, _ when
-                stackLength >= 1 && ((isSemiSemi && not wholeFile) ||  tokenStartCol <= offsidePos.Column) ->
-
+                isSemiSemi && not wholeFile || tokenStartCol <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | _, CtxtNamespaceBody offsidePos, _, _ when
-                stackLength >= 1
-             && (if isNamespaceContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column ->
-
+        | _, CtxtNamespaceBody offsidePos, _, _ when startCol (isNamespaceContinuator token) <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | _, CtxtException offsidePos, _, _ when
-                stackLength >= 1 && (isSemiSemi || tokenStartCol <= offsidePos.Column) ->
-
+        | _, CtxtException offsidePos, _, _ when isSemiSemi || tokenStartCol <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | _, CtxtMemberBody offsidePos, _, _ when
-                stackLength >= 1 && (isSemiSemi || tokenStartCol <= offsidePos.Column) ->
-
+        | _, CtxtMemberBody offsidePos, _, _ when isSemiSemi || tokenStartCol <= offsidePos.Column ->
             popCtxt()
             insertToken Token.ODECLEND
-        | _, CtxtMemberHead offsidePos, _, _ when
-                stackLength >= 1 && (isSemiSemi || tokenStartCol <= offsidePos.Column) ->
-
+        | _, CtxtMemberHead offsidePos, _, _ when isSemiSemi || tokenStartCol <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | _, CtxtIf offsidePos, _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || (if isIfBlockContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column) ->
-
+        | _, CtxtIf offsidePos, _, _ when isSemiSemi || startCol (isIfBlockContinuator token) <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | _, CtxtWithAsLet offsidePos, _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || (if isLetContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column) ->
-
+        | _, CtxtWithAsLet offsidePos, _, _ when isSemiSemi || startCol (isLetContinuator token) <= offsidePos.Column ->
             popCtxt ()
             insertToken Token.OEND
-        | _, CtxtWithAsAugment offsidePos, _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || (if isWithAugmentBlockContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column) ->
-
+        | _, CtxtWithAsAugment offsidePos, _, _ when 
+             isSemiSemi || startCol (isWithAugmentBlockContinuator token) <= offsidePos.Column ->
             popCtxt ()
             insertToken Token.ODECLEND
-        | _, CtxtMatch offsidePos, _, _ when
-                stackLength >= 1 && (isSemiSemi || tokenStartCol <= offsidePos.Column) ->
-
+        | _, CtxtMatch offsidePos, _, _ when isSemiSemi || tokenStartCol <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | _, CtxtFor offsidePos, _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || (if isForLoopContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column) ->
-
+        | _, CtxtFor offsidePos, _, _ when isSemiSemi || (startCol (isForLoopContinuator token) <= offsidePos.Column) ->
             popCtxt ()
             reprocess ()
-        | _, CtxtWhile offsidePos, _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || (if isWhileBlockContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column) ->
-
+        | _, CtxtWhile offsidePos, _, _ when  
+                isSemiSemi || startCol (isWhileBlockContinuator token) <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | _, CtxtWhen offsidePos, _, _ when
-               stackLength >= 1 && (isSemiSemi || tokenStartCol <= offsidePos.Column) ->
-
+        | _, CtxtWhen offsidePos, _, _ when isSemiSemi || tokenStartCol <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | _, CtxtFun offsidePos, _, _ when
-               stackLength >= 1 && (isSemiSemi || tokenStartCol <= offsidePos.Column) ->
-
+        | _, CtxtFun offsidePos, _, _ when isSemiSemi || tokenStartCol <= offsidePos.Column ->
             popCtxt ()
             insertToken Token.OEND
-        | _, CtxtFunction offsidePos, _, _ when
-               stackLength >= 1 && (isSemiSemi || tokenStartCol <= offsidePos.Column) ->
-
+        | _, CtxtFunction offsidePos, _, _ when isSemiSemi || tokenStartCol <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | _, CtxtTry offsidePos, _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || (if isTryBlockContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column) ->
-
+        | _, CtxtTry offsidePos, _, _ when isSemiSemi || startCol (isTryBlockContinuator token) <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | _, CtxtThen offsidePos, _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || (if isThenBlockContinuator token then tokenStartCol + 1 else tokenStartCol) <= offsidePos.Column) ->
-
+        | _, CtxtThen offsidePos, _, _ when  
+                isSemiSemi || startCol (isThenBlockContinuator token) <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
-        | _, CtxtElse offsidePos, _, _ when
-                stackLength >= 1 && (isSemiSemi || tokenStartCol <= offsidePos.Column) ->
-
+        | _, CtxtElse offsidePos, _, _ when isSemiSemi || tokenStartCol <= offsidePos.Column ->
             popCtxt ()
             reprocess ()
         | _, CtxtMatchClauses (leadingBar, offsidePos), _, _ when
-                stackLength >= 1
-             && (isSemiSemi
-                 || if token == Token.BAR
-                    then
-                        let cond1 = tokenStartCol + (if leadingBar then 0 else 2)  < offsidePos.Column
-                        let cond2 = tokenStartCol + (if leadingBar then 1 else 2)  < offsidePos.Column
-                        if (cond1 <> cond2) then () //todo: give good warnings, context is undented [misonijnik]
-                        cond1
-                    elif token == Token.END then tokenStartCol + (if leadingBar then -1 else 1) < offsidePos.Column
-                    else tokenStartCol + (if leadingBar then -1 else 1) < offsidePos.Column) ->
+                (isSemiSemi
+             || match token with
+                | BAR true ->
+                     let cond1 = tokenStartCol + (if leadingBar then 0 else 2) < offsidePos.Column
+                     let cond2 = tokenStartCol + (if leadingBar then 1 else 2) < offsidePos.Column
+                     if (cond1 <> cond2) then () //todo: give good warnings, context is undented [misonijnik]
+                     cond1
+                | END true -> tokenStartCol + (if leadingBar then -1 else 1) < offsidePos.Column
+                | _ -> tokenStartCol + (if leadingBar then -1 else 1) < offsidePos.Column) ->
 
             popCtxt ()
             insertToken Token.OEND
-        | namespaceToken, _, _, _  when stackLength >= 1 && namespaceToken == Token.NAMESPACE ->
+        | NAMESPACE true, _, _, _  when stackLength >= 1 ->
             pushCtxt tokenTup (CtxtNamespaceHead (tokenStartPos, token))
             returnToken tokenTup
-        | moduleToken, _, _, _ when stackLength >= 1 && moduleToken == Token.MODULE ->
+        | MODULE true, _, _, _ when stackLength >= 1 ->
             insertComingSoonTokens &contextStack tokenTup Token.MODULE_COMING_SOON Token.MODULE_IS_HERE
             pushCtxt tokenTup (CtxtModuleHead (tokenStartPos, token))
             hwTokenFetch useBlockRule
-        | exceptionToken, _, _, _ when stackLength >= 1 && exceptionToken == Token.EXCEPTION ->
+        | EXCEPTION true, _, _, _ when stackLength >= 1 ->
             pushCtxt tokenTup (CtxtException tokenStartPos)
             returnToken tokenTup
-        | letToken, (CtxtMemberHead _ as ctxt), _, _ when
-                stackLength >= 1 && (letToken == Token.LET || letToken == Token.USE) ->
-
-            let oTokent = if letToken == Token.LET then Token.OLET else Token.OUSE
+        | (LET true | USE true), (CtxtMemberHead _ as ctxt), _, _ ->
+            let oTokent = if (|LET|) token then Token.OLET else Token.OUSE
             let startPos = match ctxt with CtxtMemberHead startPos -> startPos | _ -> tokenStartPos
             popCtxt ()
             pushCtxt tokenTup (CtxtLetDecl (true, startPos))
             returnToken (tokenTup.UseLocation oTokent)
-        | letToken, ctxt, _, _ when
-                stackLength >= 1 && (letToken == Token.LET || letToken == Token.USE) ->
- 
-            let oTokent = if letToken == Token.LET then Token.OLET else Token.OUSE
+        | (LET true | USE true), ctxt, _, _ when stackLength >= 1 ->
+            let oTokent = if (|LET|) token then Token.OLET else Token.OUSE
             let blockLet = match ctxt with | CtxtSeqBlock _ | CtxtMatchClauses _ -> true | _ -> false
             pushCtxt tokenTup (CtxtLetDecl (blockLet, tokenStartPos))
             returnToken (if blockLet then (tokenTup.UseLocation oTokent) else tokenTup)
-        | letBangToken, ctxt, _, _ when
-                stackLength >= 1 && (letBangToken == Token.LET_BANG || letBangToken == Token.USE_BANG) ->
- 
-            let oTokent = if letBangToken == Token.LET_BANG then Token.OLET_BANG else Token.OUSE_BANG
+        | (LET_BANG true | USE_BANG true), ctxt, _, _ when stackLength >= 1 ->
+            let oTokent = if (|LET_BANG|) token then Token.OLET_BANG else Token.OUSE_BANG
             let blockLet = match ctxt with | CtxtSeqBlock _ -> true | _ -> false
             pushCtxt tokenTup (CtxtLetDecl (blockLet, tokenStartPos))
             returnToken (if blockLet then (tokenTup.UseLocation oTokent) else tokenTup)
@@ -660,32 +609,206 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib) =
 
             pushCtxt tokenTup (CtxtMemberHead tokenStartPos)
             returnToken tokenTup
-        | token, ctxt, _, _ when stackLength >= 1 && isAccessModifier token && peekNextToken() == Token.NEW ->
+        | AccessModifier true, ctxt, _, _ when stackLength >= 1 && (|NEW|) (peekNextToken ()) ->
             pushCtxt tokenTup (CtxtMemberHead tokenStartPos)
             returnToken tokenTup
-        | newToken, ctxt, _, _ when
-                stackLength >= 1
-             && peekNextToken() == Token.LPAREN
+        | NEW true, ctxt, _, _ when
+                stackLength >= 1 
+             && (|LPAREN|) (peekNextToken ())
              && (match ctxt with CtxtMemberHead _ -> false | _ -> true) ->
+
             pushCtxt tokenTup (CtxtMemberHead(tokenStartPos))
             returnToken tokenTup
-        | equalsToken, CtxtLetDecl _, _, _ when stackLength >= 1 && equalsToken == Token.EQUALS ->
+        | EQUALS true, (CtxtLetDecl _ | CtxtTypeDefns _), _, _ ->
             pushCtxtSeqBlock true AddBlockEnd
             returnToken tokenTup
-        | equalsToken, CtxtTypeDefns _, _, _ when stackLength >= 1 && equalsToken == Token.EQUALS ->
-            pushCtxtSeqBlock true AddBlockEnd
-            returnToken tokenTup
-        | lazyAsserToken, _, _, _ when lazyAsserToken == Token.LAZY || lazyAsserToken == Token.ASSERT ->
+        | (LAZY true | ASSERT true), _, _, _ ->
             if isControlFlowOrNotSameLine ()
             then
-                let token = if lazyAsserToken == Token.LAZY then Token.OLAZY else Token.OASSERT
+                let token = if (|LAZY|) token then Token.OLAZY else Token.OASSERT
                 pushCtxtSeqBlock true AddBlockEnd
                 returnToken (tokenTup.UseLocation token)
             else returnToken tokenTup
+        | EQUALS true, CtxtWithAsLet _, _, _
+        | EQUALS true, CtxtVanilla (_, true), CtxtSeqBlock _, (CtxtWithAsLet _ | CtxtParen (LBRACE true, _)) ->
+            if isControlFlowOrNotSameLine()
+            then pushCtxtSeqBlock true AddBlockEnd
+            else pushCtxtSeqBlock false NoAddBlockEnd
+            returnToken tokenTup
+        | EQUALS true, CtxtMemberHead offsidePos, _, _ ->
+            replaceCtxt tokenTup (CtxtMemberBody offsidePos)
+            pushCtxtSeqBlock true AddBlockEnd
+            returnToken tokenTup
+        | LeftToken true, _, _, _ ->
+            pushCtxt tokenTup (CtxtParen (token, tokenStartPos))
+            pushCtxtSeqBlock false NoAddBlockEnd
+            returnToken tokenTup
+        | STRUCT true, CtxtSeqBlock _, (CtxtModuleBody _ | CtxtTypeDefns _), _ ->
+            pushCtxt tokenTup (CtxtParen (token, tokenStartPos))
+            pushCtxtSeqBlock false NoAddBlockEnd
+            returnToken tokenTup
+        | RARROW true, (CtxtWhile _ | CtxtFor _ | CtxtWhen _ | CtxtMatchClauses _ | CtxtFun _), _, _
+        | RARROW true, CtxtSeqBlock _, (CtxtParen ((LBRACK true | LBRACE true | LBRACK_BAR true), _)
+                                      | CtxtDo _ 
+                                      | CtxtWhile _ 
+                                      | CtxtFor _ 
+                                      | CtxtWhen _ 
+                                      | CtxtMatchClauses _ 
+                                      | CtxtTry _ 
+                                      | CtxtThen _ 
+                                      | CtxtElse _), _ ->
+            pushCtxtSeqBlock false AddOneSidedBlockEnd
+            returnToken tokenTup
+        | LARROW true, _, _, _ when isControlFlowOrNotSameLine () ->
+            pushCtxtSeqBlock true AddBlockEnd
+            returnToken tokenTup
+        | (DO true | DO_BANG true), _, _, _ ->
+            let odoToken = if (|DO|) token then Token.ODO else Token.ODO_BANG
+            pushCtxt tokenTup (CtxtDo tokenStartPos)
+            pushCtxtSeqBlock true AddBlockEnd
+            returnToken (tokenTup.UseLocation odoToken)
+        | Infix true, ctxt, _, _ when not (isSameLine ()) && (match ctxt with CtxtMatchClauses _ -> false | _ -> true) ->
+            pushCtxtSeqBlock false NoAddBlockEnd
+            returnToken tokenTup
+        | WITH true, (CtxtTry _ | CtxtMatch _), _, _ ->
+            let lookaheadTokenTup = peekNextTokenTup ()
+            let lookaheadTokenStartPos = lookaheadTokenTup.StartPosOfTokenTup () 
+            let leadingBar = (|BAR|) (peekNextToken ())
+            pushCtxt lookaheadTokenTup (CtxtMatchClauses (leadingBar, lookaheadTokenStartPos))
+            returnToken (tokenTup.UseLocation Token.OWITH)
+        | FINALLY true, CtxtTry _, _, _ ->
+            pushCtxtSeqBlock true AddBlockEnd
+            returnToken tokenTup
+        | WITH true, ((CtxtException _ | CtxtTypeDefns _ | CtxtMemberHead _ | CtxtInterfaceHead _ | CtxtMemberBody _) as limCtxt), _, _
+        | WITH true, (CtxtSeqBlock _ as limCtxt), CtxtParen(LBRACE true, _), _ ->
+            let lookaheadTokenTup = peekNextTokenTup ()
+            let lookaheadTokenStartPos = lookaheadTokenTup.StartPosOfTokenTup ()
+            let lookaheadToken = lookaheadTokenTup.CurrentTokenType 
+            match lookaheadToken with
+            | AfterWith true ->
+                let offsidePos = 
+                    if lookaheadTokenStartPos.Column > tokenTup.EndPosition.Column
+                    then tokenStartPos
+                    else limCtxt.StartPos
+                pushCtxt tokenTup (CtxtWithAsLet offsidePos)
+                let isFollowedByLongIdentEquals = 
+                    let tokenTup = popNextTokenTup ()
+                    let res = isLongIdentEquals (tokenTup.CurrentTokenType)
+                    delayTokenTup tokenTup
+                    res
+
+                if isFollowedByLongIdentEquals then pushCtxtSeqBlock false NoAddBlockEnd                      
+                returnToken (tokenTup.UseLocation Token.OWITH)
+            | _ ->
+                if ((|LBRACK_LESS|) lookaheadToken) && (lookaheadTokenStartPos.Line = tokenTup.StartPosition.Line)
+                then
+                    let offsidePos = tokenStartPos
+                    pushCtxt tokenTup (CtxtWithAsLet offsidePos)
+                    returnToken (tokenTup.UseLocation Token.OWITH)
+                else
+                    let offsidePos = limCtxt.StartPos
+                    pushCtxt tokenTup (CtxtWithAsAugment offsidePos)
+                    pushCtxtSeqBlock true AddBlockEnd
+                    returnToken tokenTup
+        | WITH true, _, _, _ ->
+            pushCtxt tokenTup (CtxtWithAsAugment tokenStartPos)
+            pushCtxtSeqBlock true AddBlockEnd
+            returnToken tokenTup
+        | FUNCTION true, _, _, _ ->
+            let lookaheadTokenTup = peekNextTokenTup ()
+            let lookaheadTokenStartPos = lookaheadTokenTup.StartPosOfTokenTup ()
+            let leadingBar = (|BAR|) (peekNextToken ())
+            pushCtxt tokenTup (CtxtFunction tokenStartPos)
+            pushCtxt lookaheadTokenTup (CtxtMatchClauses (leadingBar, lookaheadTokenStartPos))
+            returnToken (tokenTup.UseLocation Token.OFUNCTION)
+        | THEN true, _, _, _ ->
+            pushCtxt tokenTup (CtxtThen tokenStartPos)
+            pushCtxtSeqBlock true AddBlockEnd
+            returnToken (tokenTup.UseLocation Token.OTHEN)
+        | ELSE true, _, _ ,_ ->
+            let lookaheadTokenTup = peekNextTokenTup ()
+            let lookaheadTokenStartPos = lookaheadTokenTup.StartPosOfTokenTup ()
+            match peekNextToken () with 
+            | IF true when isSameLine() ->
+                popNextTokenTup () |> ignore
+                pushCtxt tokenTup (CtxtIf tokenStartPos)
+                returnToken (tokenTup.UseLocation Token.ELIF)
+            | _ ->
+                pushCtxt tokenTup (CtxtElse tokenStartPos)
+                pushCtxtSeqBlock true AddBlockEnd
+                returnToken (tokenTup.UseLocation Token.OELSE)
+        | (ELIF true | IF true), _, _, _ ->
+            pushCtxt tokenTup (CtxtIf tokenStartPos)
+            returnToken tokenTup
+        | (MATCH true| MATCH_BANG true), _, _,_ ->
+            pushCtxt tokenTup (CtxtMatch tokenStartPos)
+            returnToken tokenTup
+        | FOR true, _, _, _ ->
+            pushCtxt tokenTup (CtxtFor tokenStartPos)
+            returnToken tokenTup
+        | WHILE true, _, _, _ ->
+            pushCtxt tokenTup (CtxtWhile tokenStartPos)
+            returnToken tokenTup
+        | WHEN true, CtxtSeqBlock _, _, _ ->
+            pushCtxt tokenTup (CtxtWhen tokenStartPos)
+            returnToken tokenTup
+        | FUN true, _, _, _ ->
+            pushCtxt tokenTup (CtxtFun tokenStartPos)
+            returnToken (tokenTup.UseLocation Token.OFUN)
+        | INTERFACE true, _, _, _ ->
+            let lookaheadTokenTup = peekNextTokenTup()
+            let lookaheadTokenStartPos = lookaheadTokenTup.StartPosOfTokenTup ()
+            let lookaheadToken = lookaheadTokenTup.CurrentTokenTup
+            match lookaheadToken with
+            | AfterInterface true ->
+                pushCtxt tokenTup (CtxtParen (token, tokenStartPos))
+                pushCtxtSeqBlock true AddBlockEnd
+                returnToken tokenTup
+            | _ ->
+                pushCtxt tokenTup (CtxtInterfaceHead tokenStartPos)
+                returnToken (tokenTup.useLocation Token.OINTERFACE_MEMBER)
+        | CLASS true, _, _, _ ->
+            pushCtxt tokenTup (CtxtParen (token, tokenStartPos))
+            pushCtxtSeqBlock true AddBlockEnd
+            returnToken tokenTup
+        | TYPE true, _, _, _ ->
+            insertComingSoonTokens &contextStack tokenTup Token.TYPE_COMING_SOON Token.TYPE_IS_HERE
+            pushCtxt tokenTup (CtxtTypeDefns tokenStartPos)
+            hwTokenFetch useBlockRule
+        | TRY true, _, _, _ ->
+            pushCtxt tokenTup (CtxtTry tokenStartPos)
+            pushCtxtSeqBlock alse AddOneSidedBlockEnd
+            returnToken tokenTup
+        | OBLOCKBEGIN true, _, _, _ -> returnToken tokenTup
+        | ODUMMY true, _, _, _ -> hwTokenFetch useBlockRule
+        | _, CtxtSeqBlock _, _, _ ->
+            pushCtxt tokenTup (CtxtVanilla(tokenStartPos, isLongIdentEquals token))
+            returnToken tokenTup
+        | _ -> returnToken tokenTup
+
+    let rec nextToken () =
+        let tokenTup =
+            if lightSyntaxStatus
+            then hwTokenFetch true
+            else swTokenFetch ()
+        match tokenTup.CurrentTokenType with
+        | RBRACE true ->
+            insertComingSoonTokens' tokenTup Token.RBRACE_COMING_SOON Token.RBRACE_IS_HERE
+            nextToken ()
+        | RPAREN true ->
+            insertComingSoonTokens' tokenTup Token.RPAREN_COMING_SOON Token.RBRACE_IS_HERE
+            nextToken ()
+        | OBLOCKEND true ->
+            insertComingSoonTokens' tokenTup Token.OBLOCKEND_COMING_SOON Token.OBLOCKEND_IS_HERE
+            nextToken ()
+        | _ -> ()
 
     interface ILexer with
-        member x.Start () = myLexer.Start ()
-        member x.Advance () = myLexer.Advance ()
+        member x.Start () =
+            myLexer.Start ()
+            peekInitial () |> ignore
+        member x.Advance () = nextToken ()
+
         member x.CurrentPosition
             with get () = (x :> ILexer<FSharpLexicalFilterState>).CurrentPosition :> obj
             and set value =

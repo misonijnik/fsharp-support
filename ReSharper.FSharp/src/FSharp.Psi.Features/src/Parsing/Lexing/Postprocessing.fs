@@ -3,6 +3,7 @@ open JetBrains.ReSharper.Psi.Parsing
 open JetBrains.ReSharper.Psi.ExtensionsAPI.Tree
 open JetBrains.ReSharper.Plugins.FSharp.Common.Util
 open JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
+open JetBrains.ReSharper.Plugins.FSharp.Psi.Features.Util.FSharpTokenUtil
 open System.Collections.Generic
 type Token = FSharpTokenType
 
@@ -176,8 +177,10 @@ module Postprocessing =
     let leftParen = NodeTypeSet Token.LPAREN |> leftBraceBrack.Union
     let sigStructBegin = NodeTypeSet (Token.SIG, Token.STRUCT, Token.BEGIN)
     let leftBraceBrackAndBeginTypeApp = NodeTypeSet (Token.BEGIN, Token.BEGIN_TYPE_APP) |> leftBraceBrack.Union
+    let leftToken =
+        NodeTypeSet (Token.SIG, Token.LQUOTE_TYPED, Token.LQUOTE_UNTYPED, Token.LPAREN)
+     |> leftBraceBrackAndBeginTypeApp.Union
     let classStructInterface = NodeTypeSet (Token.CLASS, Token.STRUCT, Token.INTERFACE)
-    let leftParenBrackLess = NodeTypeSet (Token.LPAREN, Token.LESS, Token.LBRACK_LESS)
     let grammarInTypes =
         NodeTypeSet
            (Token.DEFAULT,
@@ -305,9 +308,24 @@ module Postprocessing =
 
     let valStaticAbstractMemberOverrideDefault =
         NodeTypeSet (Token.VAL, Token.STATIC, Token.ABSTRACT, Token.MEMBER, Token.OVERRIDE, Token.DEFAULT)
+    let afterWith =
+        NodeTypeSet (Token.RBRACE, Token.IDENTIFIER, Token.PUBLIC, Token.PRIVATE, Token.INTERNAL, Token.INLINE)
+    let afterInterface =
+        NodeTypeSet
+           (Token.DEFAULT,
+            Token.OVERRIDE,
+            Token.INTERFACE,
+            Token.NEW,
+            Token.TYPE,
+            Token.STATIC,
+            Token.END,
+            Token.MEMBER,
+            Token.ABSTRACT,
+            Token.INHERIT,
+            Token.LBRACK_LESS)
 
-    let isInfix token = infix.[token]
-    let isNonAssocInfixToken token = token == Token.EQUALS
+    let (|Infix|) token = infix.[token]
+    let isNonAssocInfixToken token = (|EQUALS|) token
     let isIfBlockContinuator token = ifBlockContinuator.[handleDummy token]
     let isTryBlockContinuator token = tryBlockContinuator.[handleDummy token]
     let isThenBlockContinuator token = thenBlockContinuator.[handleDummy token]
@@ -319,31 +337,34 @@ module Postprocessing =
     let isWhileBlockContinuator token = doneDeclEnd.[handleDummy token]
     let isLetContinuator token = andDeclEnd.[handleDummy token]
     let isTypeSeqBlockElementContinuator token = typeSeqBlockElementContinuator.[handleDummy token]
-    let isSeqBlockElementContinuator token = (|INFIX|) token || seqBlockElementContinuator.[handleDummy token]
-    let isWithAugmentBlockContinuator token = handleDummy token == Token.END
+    let isSeqBlockElementContinuator token = (|Infix|) token || seqBlockElementContinuator.[handleDummy token]
+    let isWithAugmentBlockContinuator token = (|END|) <| handleDummy token
     let isLongIdentifier token = longIdentifier.[token]
     let isLongIdentifierOrGlobal token = longIdentifierOrGlobal.[token]
     let isAtomicExprEndToken token = atomicExprEndToken.[token]
     let isParenTokensBalance leftToken rightToken =
-        leftToken <> null && rightToken <> null && parenTokensBalance.[leftToken] == rightToken
+        isNotNull leftToken && isNotNull rightToken && parenTokensBalance.[leftToken] == rightToken
     let isLeftBraceBrack token = leftBraceBrack.[token]
     let isLeftParenBegin token = leftParenBegin.[token]
-    let isLeftParen token = leftParen.[token]
+    let (|LeftParen|) token = leftParen.[token]
     let isSigStructBegin token = sigStructBegin.[token]
     let isLeftBraceBrackAndBeginTypeApp token = leftBraceBrackAndBeginTypeApp.[token]
     let isClassStructInterface token = classStructInterface.[token]
     let isLeftParenBrackAndBegin token = leftParenBrackAndBegin.[token]
-    let isLeftParenBrackLess token = leftParenBrackLess.[token]
-    let isGrammarInTypes token = grammarInTypes.[token]
-    let isBeforeTypeApplication token = beforeTypeApplication.[token]
-    let isAdjacentPrefixTokens token = adjacentPrefixTokens.[token]
+    let (|GrammarInTypes|) token = grammarInTypes.[token]
+    let (|BeforeTypeApplication|) token = beforeTypeApplication.[token]
+    let (|AdjacentPrefixTokens|) token = adjacentPrefixTokens.[token]
     let isSignedDigits token = signedDigits.[token]
     let isControlFlow token = controlFlow.[token]
-    let isSemiSemi token = token == Token.SEMICOLON_SEMICOLON
-    let isForcesHeadContextClosure token = forcesHeadContextClosure.[token]
-    let isBalancingRule token = balancingRule.[token]
-    let isTransitionRule leftToken rightToken = namespaceDotRecGlobal.[leftToken] && recIdentifierGlobal.[rightToken]
-    let isAccessModifier token = accessModifier.[token]
-    let isModuleDotRec token = moduleDotRec.[token]
-    let isRecIdentifier token = recIdentifier.[token]
+    let isSemiSemi token = (|SEMICOLON_SEMICOLON|) token
+    let (|ForcesHeadContextClosure|) token = forcesHeadContextClosure.[token]
+    let (|BalancingRule|) token = balancingRule.[token]
+    let (|NamespaceDotRecGlobal|) token = namespaceDotRecGlobal.[token]
+    let (|RecIdentifierGlobal|) token = recIdentifierGlobal.[token]
+    let (|AccessModifier|) token = accessModifier.[token]
+    let (|ModuleDotRec|) token = moduleDotRec.[token]
+    let (|RecIdentifier|) token = recIdentifier.[token]
     let isValStaticAbstractMemberOverrideDefault token = valStaticAbstractMemberOverrideDefault.[token]
+    let (|LeftToken|) token = leftToken.[token]
+    let (|AfterWith|) token = afterWith.[token]
+    let (|AfterInterface|) token = afterInterface.[token]

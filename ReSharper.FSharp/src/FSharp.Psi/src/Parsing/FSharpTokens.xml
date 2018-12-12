@@ -185,6 +185,10 @@
         <Token name="TYPE_IS_HERE" />
         <Token name="MODULE_COMING_SOON" />
         <Token name="MODULE_IS_HERE" />
+        <Token name="RBRACE_COMING_SOON" />
+        <Token name="RBRACE_IS_HERE" />
+        <Token name="RPAREN_COMING_SOON" />
+        <Token name="RPAREN_IS_HERE" />
         <Token name="HIGH_PRECEDENCE_BRACK_APP" />
         <Token name="HIGH_PRECEDENCE_PAREN_APP" />
         <Token name="HIGH_PRECEDENCE_TYAPP" />
@@ -194,6 +198,7 @@
         <Token name="OUSE_BANG" />
         <Token name="ODO" />
         <Token name="ODO_BANG" />
+        <Token name="OWITH" />
         <Token name="OTHEN" />
         <Token name="OELSE" />
         <Token name="OFUNCTION" />
