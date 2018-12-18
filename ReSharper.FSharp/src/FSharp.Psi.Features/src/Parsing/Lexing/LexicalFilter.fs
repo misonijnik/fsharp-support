@@ -25,14 +25,18 @@ open ImmutableStack
 open FSharpTokenUtil
 open Context
 open Postprocessing
-type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib, lightSyntaxStatus) =
-    let myLexer = FSharpLexer buffer
+type LexicalFilter(buffer, compilingFsLib, lightSyntaxStatus) =
+    let myLexer = FSharpLexerWithLineIndexing buffer
     let tokenTupToState (token : TokenTup) =
-        FSharpLexerState
+        FSharpLexerLineIndexingState
             (token.CurrentTokenType,
              token.EndPosition.AbsoluteOffset,
              token.StartPosition.AbsoluteOffset,
              token.EndPosition.AbsoluteOffset,
+             token.StartPosition.StartOfLineAbsoluteOffset,
+             token.EndPosition.StartOfLineAbsoluteOffset,
+             token.StartPosition.Line,
+             token.EndPosition.Line,
              token.LexicalState)
 
     let compareTokenText text = LexerUtil.CompareTokenText (myLexer, text)
@@ -51,17 +55,15 @@ type LexicalFilter(buffer, lineIndex : LineIndex, compilingFsLib, lightSyntaxSta
 
     let getCurrentToken () =
         let internalPosition = myLexer.CurrentPosition
-        let startLine = (lineIndex.GetLineColByOffset internalPosition.yy_buffer_start).Line
-        let endLine = (lineIndex.GetLineColByOffset internalPosition.yy_buffer_end).Line
         TokenTup
-            (internalPosition.currTokenType,
-             Position (startLine.GetHashCode (),
-                       lineIndex.GetLineStartOffset startLine,
-                       internalPosition.yy_buffer_start),
-             Position (endLine.GetHashCode (),
-                       lineIndex.GetLineStartOffset endLine,
-                       internalPosition.yy_buffer_end),
-             internalPosition.yy_lexical_state)
+            (internalPosition.CurrentTokenType,
+             Position (internalPosition.LineTokenStart,
+                       internalPosition.BufferLineTokenStart,
+                       internalPosition.BufferStart),
+             Position (internalPosition.LineTokenEnd,
+                       internalPosition.BufferLineTokenEnd,
+                       internalPosition.BufferEnd),
+             internalPosition.LexicalState)
 
     let getCurrentPosition () =
         FSharpLexicalFilterState

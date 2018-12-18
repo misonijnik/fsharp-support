@@ -340,9 +340,10 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing.Lexing
 
     protected int BufferIndex { get { return yy_buffer_index; } set { yy_buffer_index = value; } }
     protected int BufferStart { get { return yy_buffer_start; } set { yy_buffer_start = value; } }
-    protected int BufferEnd { set { yy_buffer_end = value; } }
-    public    int EOFPos { get { return yy_eof_pos; } }
-    protected int LexicalState { get { return yy_lexical_state; } }
+    protected int BufferEnd { get { return yy_buffer_start; } set { yy_buffer_end = value; } }
+    public    int EOFPos { get { return yy_eof_pos; } set { yy_buffer_end = value; } }
+    protected int LexicalState { get { return yy_lexical_state; } set { yy_buffer_end = value; } }
+    protected TokenNodeType CurrentToken { get { return currTokenType; } set { currTokenType = value; } }
 
     private void locateToken()
     {

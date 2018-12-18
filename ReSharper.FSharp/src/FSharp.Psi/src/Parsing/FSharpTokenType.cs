@@ -111,6 +111,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
     public static readonly NodeTypeSet Identifiers;
     public static readonly NodeTypeSet Strings;
     public static readonly NodeTypeSet Literals;
+    public static readonly NodeTypeSet Comments;
 
     static FSharpTokenType()
     {
@@ -212,9 +213,12 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
 
       Strings = new NodeTypeSet(
         CHARACTER_LITERAL,
-        STRING, UNFINISHED_STRING,
-        VERBATIM_STRING, UNFINISHED_VERBATIM_STRING,
-        TRIPLE_QUOTED_STRING, UNFINISHED_TRIPLE_QUOTED_STRING,
+        STRING,
+        UNFINISHED_STRING,
+        VERBATIM_STRING,
+        UNFINISHED_VERBATIM_STRING,
+        TRIPLE_QUOTED_STRING,
+        UNFINISHED_TRIPLE_QUOTED_STRING,
         BYTEARRAY);
 
       Literals = new NodeTypeSet(
@@ -232,6 +236,13 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
         BIGNUM,
         NATIVEINT,
         UNATIVEINT);
+
+      Comments = new NodeTypeSet(
+        BLOCK_COMMENT,
+        UNFINISHED_BLOCK_COMMENT,
+        UNFINISHED_STRING_IN_COMMENT,
+        UNFINISHED_VERBATIM_STRING_IN_COMMENT,
+        UNFINISHED_TRIPLE_QUOTED_STRING_IN_COMMENT);
     }
   }
 }
