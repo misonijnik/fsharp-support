@@ -35,11 +35,13 @@ type TokenTup =
     val CurrentTokenType : TokenNodeType
     val StartPosition : Position
     val EndPosition : Position
+    val TypeParenLevel : int
     val LexicalState : int
-    new (currTokenType, bufferStart, bufferEnd, lexicalState) =
+    new (currTokenType, bufferStart, bufferEnd, typeParenLevel, lexicalState) =
         { CurrentTokenType = currTokenType;
           StartPosition = bufferStart;
           EndPosition = bufferEnd;
+          TypeParenLevel = typeParenLevel;
           LexicalState = lexicalState; }
 
     member x.StartPosOfTokenTup () =
@@ -47,17 +49,22 @@ type TokenTup =
             then x.StartPosition.ColumnMinusOne
             else x.StartPosition
 
-    member x.UseLocation(tok) =
-        TokenTup (tok, x.StartPosition, x.EndPosition, x.LexicalState)
+    member x.UseLocation tok =
+        TokenTup (tok, x.StartPosition, x.EndPosition, x.TypeParenLevel, x.LexicalState)
 
-    member x.UseStartLocation(tok) =
-        TokenTup (tok, x.StartPosition, x.StartPosition, x.LexicalState)
+    member x.UseStartLocation tok =
+        TokenTup (tok, x.StartPosition, x.StartPosition, x.TypeParenLevel, x.LexicalState)
 
-    member x.UseEndLocation(tok) =
-        TokenTup (tok, x.EndPosition, x.EndPosition, x.LexicalState)
+    member x.UseEndLocation tok =
+        TokenTup (tok, x.EndPosition, x.EndPosition, x.TypeParenLevel, x.LexicalState)
 
-    member x.UseShiftedLocation(tok, shiftLeft, shiftRight) =
-        TokenTup (tok, x.StartPosition.ShiftColumnBy shiftLeft, x.EndPosition.ShiftColumnBy shiftRight, x.LexicalState)
+    member x.UseShiftedLocation (tok, shiftLeft, shiftRight) =
+        TokenTup
+            (tok,
+             x.StartPosition.ShiftColumnBy shiftLeft,
+             x.EndPosition.ShiftColumnBy shiftRight,
+             x.TypeParenLevel,
+             x.LexicalState)
 
 module Postprocessing =
     open JetBrains.ReSharper.Plugins.FSharp.Psi.Features.Util.ImmutableStack
@@ -115,7 +122,6 @@ module Postprocessing =
     let private andDeclEnd = NodeTypeSet (Token.AND) |> odeclend.Union
     let private interfaceContinuator = NodeTypeSet (Token.END) |> odeclend.Union
 
-    //todo: override locateToken to add EOF token [misonijnik]
     let private notNamespaceContinuator = NodeTypeSet (Token.EOF, Token.NAMESPACE)
     let private typeContinuator =
         NodeTypeSet (Token.RBRACE, Token.WITH, Token.BAR, Token.AND, Token.END)
@@ -164,7 +170,6 @@ module Postprocessing =
                 new KeyValuePair<NodeType, TokenNodeType>(Token.SIG, Token.END)
                 new KeyValuePair<NodeType, TokenNodeType>(Token.STRUCT, Token.END)
                 new KeyValuePair<NodeType, TokenNodeType>(Token.LBRACK_BAR, Token.BAR_RBRACK)
-                //todo: LESS and GREATER may be in type application [misonijnik]
                 new KeyValuePair<NodeType, TokenNodeType>(Token.BEGIN_TYPE_APP, Token.END_TYPE_APP)
                 new KeyValuePair<NodeType, TokenNodeType>(Token.BEGIN, Token.END)
                 new KeyValuePair<NodeType, TokenNodeType>(Token.LQUOTE_TYPED, Token.RQUOTE_TYPED)
@@ -323,6 +328,9 @@ module Postprocessing =
             Token.ABSTRACT,
             Token.INHERIT,
             Token.LBRACK_LESS)
+
+    let skippedTokens =
+        NodeTypeSet (Token.NEW_LINE, Token.WHITESPACE, Token.BAD_TAB, Token.LINE_COMMENT) |> Token.Comments.Union
 
     let (|Infix|) token = infix.[token]
     let isNonAssocInfixToken token = (|EQUALS|) token

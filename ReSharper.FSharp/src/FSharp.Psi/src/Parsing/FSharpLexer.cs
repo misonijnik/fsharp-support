@@ -22,6 +22,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
     public int BufferLineTokenEnd;
     public int LineTokenStart;
     public int LineTokenEnd;
+    public int TypeParenLevel;
     public int LexicalState;
 
     public FSharpLexerLineIndexingState(
@@ -33,6 +34,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
       int bufferLineTokenEnd,
       int lineTokenStart,
       int lineTokenEnd,
+      int typeParenLevel,
       int lexicalState)
     {
       CurrentTokenType = currentTokenType;
@@ -43,8 +45,22 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
       BufferLineTokenEnd = bufferLineTokenEnd;
       LineTokenStart = lineTokenStart;
       LineTokenEnd = lineTokenEnd;
+      TypeParenLevel = typeParenLevel;
       LexicalState = lexicalState;
     }
+
+    public static FSharpLexerLineIndexingState Create(int start, int startOfLine, int line, int nParen, int lexicalState) =>
+      new FSharpLexerLineIndexingState(
+        null,
+        start,
+        start,
+        start,
+        startOfLine,
+        startOfLine,
+        line,
+        line,
+        nParen,
+        lexicalState);
   }
 
   public class FSharpLexerWithLineIndexing : FSharpLexer, ILexer, ILexer<FSharpLexerLineIndexingState>
@@ -53,6 +69,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
     private int bufferLineEnd;
     private int lineStart;
     private int lineEnd;
+    private bool EOFHere = false;
     public FSharpLexerWithLineIndexing(IBuffer buffer) : base(buffer) {}
 
     public FSharpLexerWithLineIndexing(IBuffer buffer, int startOffset, int endOffset)
@@ -64,7 +81,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
       set { CurrentPosition = (FSharpLexerLineIndexingState) value; }
     }
 
-    public FSharpLexerLineIndexingState CurrentPosition
+    public new FSharpLexerLineIndexingState CurrentPosition
     {
       get
       {
@@ -78,6 +95,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
         tokenPosition.LineTokenStart = lineStart;
         tokenPosition.LineTokenEnd = lineEnd;
         tokenPosition.LexicalState = LexicalState;
+        tokenPosition.TypeParenLevel = TypeParenLevel;
         return tokenPosition;
       }
       set
@@ -90,10 +108,21 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
         bufferLineEnd = value.BufferLineTokenEnd;
         lineStart = value.LineTokenStart;
         lineEnd = value.LineTokenEnd;
+        TypeParenLevel = value.TypeParenLevel;
         LexicalState = value.LexicalState;
+        if (CurrentToken == FSharpTokenType.EOF ||
+            CurrentToken == null && BufferEnd == EOFPos)
+          EOFHere = true;
+        else
+          EOFHere = false;
       }
     }
 
+    public void Start(FSharpLexerLineIndexingState state, int endOffset)
+    {
+      CurrentPosition = state;
+      EOFPos = endOffset;
+    }
     public override TokenNodeType _locateToken()
     {
       lineStart = lineEnd;
@@ -109,13 +138,16 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
         lineEnd += Regex.Matches(this.GetCurrTokenText(),"\n|\r\n").Count;
         bufferLineEnd = BufferEnd;
       }
-      else if (token == null && BufferEnd == EOFPos)
+      else if (!EOFHere && token == null)
       {
-        BufferEnd++;
+        EOFHere = true;
         return FSharpTokenType.EOF;
       }
 
       return token;
     }
+
+    public static int InitAdjacentTyAppState => INIT_ADJACENT_TYAPP;
+    public static int AdjacentTyApp => ADJACENT_TYAPP;
   }
 }

@@ -57,7 +57,6 @@ using static JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing.FSharpTokenType;
 %state GREATER_OP_SYMBOLIC_OP
 %state PRE_LESS_OP
 %state LINE
-%state EOF
 
 %state PPSHARP
 %state BAD_PPSHARP

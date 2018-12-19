@@ -14,12 +14,14 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing.Lexing
     public int yy_buffer_index;
     public int yy_buffer_start;
     public int yy_buffer_end;
+    public int zzParenLevel;
     public int yy_lexical_state;
 
     public FSharpLexerState(
       TokenNodeType currTokenType,
       int yy_buffer_index,
       int yy_buffer_start,
+      int zzParenLevel,
       int yy_buffer_end,
       int yy_lexical_state)
     {
@@ -27,6 +29,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing.Lexing
       this.yy_buffer_index = yy_buffer_index;
       this.yy_buffer_start = yy_buffer_start;
       this.yy_buffer_end = yy_buffer_end;
+      this.zzParenLevel = zzParenLevel;
       this.yy_lexical_state = yy_lexical_state;
     }
   }
@@ -289,6 +292,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing.Lexing
         tokenPosition.yy_buffer_index = yy_buffer_index;
         tokenPosition.yy_buffer_start = yy_buffer_start;
         tokenPosition.yy_buffer_end = yy_buffer_end;
+        tokenPosition.zzParenLevel = zzParenLevel;
         tokenPosition.yy_lexical_state = yy_lexical_state;
         return tokenPosition;
       }
@@ -298,6 +302,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing.Lexing
         yy_buffer_index = value.yy_buffer_index;
         yy_buffer_start = value.yy_buffer_start;
         yy_buffer_end = value.yy_buffer_end;
+        zzParenLevel = value.zzParenLevel;
         yy_lexical_state = value.yy_lexical_state;
       }
     }
@@ -340,9 +345,10 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing.Lexing
 
     protected int BufferIndex { get { return yy_buffer_index; } set { yy_buffer_index = value; } }
     protected int BufferStart { get { return yy_buffer_start; } set { yy_buffer_start = value; } }
-    protected int BufferEnd { get { return yy_buffer_start; } set { yy_buffer_end = value; } }
-    public    int EOFPos { get { return yy_eof_pos; } set { yy_buffer_end = value; } }
-    protected int LexicalState { get { return yy_lexical_state; } set { yy_buffer_end = value; } }
+    protected int BufferEnd { get { return yy_buffer_end; } set { yy_buffer_end = value; } }
+    public    int EOFPos { get { return yy_eof_pos; } protected set { yy_eof_pos = value; } }
+    public    int TypeParenLevel { get { return zzParenLevel; } protected set { zzParenLevel = value; } }
+    protected int LexicalState { get { return yy_lexical_state; } set { yy_lexical_state = value; } }
     protected TokenNodeType CurrentToken { get { return currTokenType; } set { currTokenType = value; } }
 
     private void locateToken()

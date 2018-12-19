@@ -4,8 +4,10 @@ open JetBrains.ReSharper.Psi.Parsing
 type Token = FSharpTokenType
 
 module FSharpTokenUtil =
-    let private (==) (leftToken : TokenNodeType) (rithtToken : TokenNodeType) =
-        leftToken.Index = rithtToken.Index
+    let private (==) (leftToken : TokenNodeType) (rightToken : TokenNodeType) =
+        if leftToken = null || rightToken = null
+        then leftToken = rightToken 
+        else leftToken.Index = rightToken.Index
     let (|ABSTRACT|) token = token == Token.ABSTRACT
     let (|AND|) token = token == Token.AND
     let (|AS|) token = token == Token.AS

@@ -81,7 +81,7 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
       public override LeafElementBase Create(string text) => new NewLine(text);
     }
 
-    public sealed class DummyNodeType : FSharpTokenNodeType
+    public sealed class DummyNodeType : TokenNodeType
     {
       public readonly TokenNodeType Token;
 
@@ -93,6 +93,16 @@ namespace JetBrains.ReSharper.Plugins.FSharp.Psi.Parsing
         Token = token;
 
       public TokenNodeType Create(TokenNodeType token) => new DummyNodeType(Index, token);
+      public override LeafElementBase Create(IBuffer buffer, TreeOffset startOffset, TreeOffset endOffset) =>
+        throw new NotImplementedException();
+
+      public override bool IsWhitespace => false;
+      public override bool IsComment => false;
+      public override bool IsStringLiteral => false;
+      public override bool IsConstantLiteral => false;
+      public override bool IsIdentifier => false;
+      public override bool IsKeyword => false;
+      public override string TokenRepresentation => "ODUMMY";
     }
 
     public const int WHITESPACE_NODE_TYPE_INDEX = LAST_GENERATED_TOKEN_TYPE_INDEX + 1;

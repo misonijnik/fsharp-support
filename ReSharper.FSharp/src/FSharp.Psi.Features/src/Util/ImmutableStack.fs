@@ -22,6 +22,7 @@ module ImmutableStack =
     let pop (stack : ImmutableStack<_>) = stack.Pop ()
 
     let rec popN n (stack : ImmutableStack<_>) =
-        if n < 1 then raise (ArgumentException "'n' must be greater then 0!")
+        if n < 0 then raise (ArgumentException "'n' must be greater then 0!")
+        elif n = 0 then stack
         elif n = 1 then pop stack else popN (n - 1) (pop stack)
-    let peekN n stack = stack |> popN n |> peek
+    let peekN n stack = stack |> popN (n - 1) |> peek
