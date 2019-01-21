@@ -25,7 +25,7 @@ type FSharpLanguageService
 
     override x.GetPrimaryLexerFactory() = lexerFactory :> _
     override x.CreateFilteringLexer(lexer) = lexer
-    override x.CreateParser(lexer, psiModule, sourceFile) = FSharpParser(sourceFile, fsCheckerService, logger) :> _
+    override x.CreateParser(lexer, psiModule, sourceFile) = FSharpParser(lexer, sourceFile, fsCheckerService, logger) :> _
 
     override x.IsTypeMemberVisible(typeMember) =
         match typeMember with
